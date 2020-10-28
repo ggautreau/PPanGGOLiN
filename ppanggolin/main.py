@@ -28,6 +28,7 @@ import ppanggolin.formats
 import ppanggolin.info
 import ppanggolin.align
 import ppanggolin.RGP
+import ppanggolin.map
 
 def checkTsvSanity(tsv):
     f = open(tsv,"r")
@@ -95,6 +96,8 @@ def cmdLine():
     desc += "    partition     Partition the pangenome graph\n"
     desc += "    rarefaction   Compute the rarefaction curve of the pangenome\n"
     desc += "    msa           Compute Multiple Sequence Alignments for pangenome gene families\n"
+    desc += "    map           Map a set of reads from a sample againts the pangenome\n"
+    desc += "    compare       \n"
     desc += "  \n"
     desc += "  Output:\n"
     desc += "    draw          Draw figures representing the pangenome through different aspects\n"
@@ -127,6 +130,8 @@ def cmdLine():
     subs.append(ppanggolin.align.alignSubparser(subparsers))
     subs.append(ppanggolin.RGP.genomicIsland.rgpSubparser(subparsers))
     subs.append(ppanggolin.RGP.spot.spotSubparser(subparsers))
+    subs.append(ppanggolin.map.mapReadsOnPang.mapSubparser(subparsers))
+    subs.append(ppanggolin.map.compareSamples.compareSubparser(subparsers))
     ppanggolin.info.infoSubparser(subparsers)#not adding to subs because the 'common' options are not needed for this.
 
     for sub in subs:#add options common to all subcommands
@@ -202,6 +207,10 @@ def main():
         ppanggolin.info.launch(args)
     elif args.subcommand == "align":
         ppanggolin.align.launch(args)
+    elif args.subcommand == "map":
+        ppanggolin.map.mapReadsOnPang.launch(args)
+    elif args.subcommand == "compare":
+        ppanggolin.map.compareSamples.launch(args)
     elif args.subcommand == "rgp":
         ppanggolin.RGP.genomicIsland.launch(args)
     elif args.subcommand == "spot":

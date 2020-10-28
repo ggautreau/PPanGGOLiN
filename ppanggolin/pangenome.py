@@ -28,6 +28,9 @@ class Pangenome:
         self._edgeGetter = {}
         self._regionGetter = {}
         self.spots = set()
+        self.samples = {}
+        self.datasets = {}
+        self.comparisons = {}
 
         self.status = {
                     'genomesAnnotated': "No",
@@ -38,7 +41,9 @@ class Pangenome:
                     'neighborsGraph':  "No",
                     'partitionned':  "No",
                     'predictedRGP' : "No",
-                    'spots' : "No"
+                    'spots' : "No",
+                    'samples' : "No",
+                    'comparisons' : "No"
                 }
         self.parameters = {}
 
@@ -170,6 +175,24 @@ class Pangenome:
         :type spots: Iterable[:class:`ppanggolin.region.Spot`]
         """
         self.spots |= set(spots)
+
+    def addSample(self, sample):
+        self.samples[sample.ID] = sample
+
+    def addSamples(self, samples):
+        self.samples.update(samples)
+
+    def addDataset(self, dataset):
+        self.datasets[dataset.ID] = dataset
+
+    def addDatasets(self, datasets):
+        self.datasets.update(datasets)
+
+    def addComparison(self, comparison):
+        self.comparisons[comparison.ID] = comparison
+
+    def addComparisons(self, comparisons):
+        self.comparisons.update(comparisons)
 
     def addOrganism(self, newOrg):
         """

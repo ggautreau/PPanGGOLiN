@@ -109,7 +109,8 @@ def writeJSON(output, compress):
         json.write("}")
     logging.getLogger().info(f"Done writing the json file : '{outname}'")
 
-def writeGEXFheader(gexf, light):
+def writeGEXFheader(gexf, light, add_sample_map_counts = False):
+    index = []
     if not light:
         index = pan.getIndex()#has been computed already
     gexf.write('<?xml version="1.1" encoding="UTF-8"?>\n<gexf xmlns:viz="http://www.gexf.net/1.2draft/viz" xmlns="http://www.gexf.net/1.2draft" version="1.2">\n')
@@ -129,7 +130,19 @@ def writeGEXFheader(gexf, light):
     if not light:
         for org, orgIndex in index.items():
             gexf.write(f'      <attribute id="{orgIndex + 12}" title="{org.name}" type="string" />\n')
-
+    shift = 0
+    if add_sample_map_counts:
+        shift = 2 * len(index) + 12
+        for sample in pan.samples:
+            gexf.write(f'      <attribute id="{shift}" title="{pan.samples[sample].ID}" type="long" />\n')
+            shift += 1
+        for dataset in pan.datasets:
+            gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].ID}" type="float" />\n')
+            shift += 1
+        for comparison in pan.comparisons:
+            gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].ID}_FC" type="float" />\n')
+            gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].ID}_p_values" type="float" />\n')
+            shift += 2
     gexf.write('    </attributes>\n')
     gexf.write('    <attributes class="edge" mode="static">\n')
     gexf.write('      <attribute id="11" title="nb_genes" type="long" />\n')
@@ -142,9 +155,10 @@ def writeGEXFheader(gexf, light):
     gexf.write(f'      <creator>PPanGGOLiN {pkg_resources.get_distribution("ppanggolin").version}</creator>\n')
     gexf.write('    </meta>\n')
 
-def writeGEXFnodes(gexf, light, soft_core = 0.95):
+def writeGEXFnodes(gexf, light, add_sample_map_counts = False, soft_core = 0.95):
     gexf.write('    <nodes>\n')
     colors = {"persistent":'a="0" b="7" g="165" r="247"','shell':'a="0" b="96" g="216" r="0"', 'cloud':'a="0" b="255" g="222" r="121"'}
+    index = []
     if not light:
         index = pan.getIndex()
 
@@ -177,6 +191,19 @@ def writeGEXFnodes(gexf, light, soft_core = 0.95):
         if not light:
             for org, genes in fam.getOrgDict().items():
                 gexf.write(f'          <attvalue for="{index[org]+12}" value="{"|".join([ gene.ID if gene.local_identifier == "" else gene.local_identifier for gene in genes])}" />\n')
+        shift = 0
+        if add_sample_map_counts:
+            shift = 2 * len(index) + 12
+            for sample in pan.samples:
+                gexf.write(f'      <attribute id="{shift}" title="{pan.samples[sample].gene_families_map_count[fam.name]}" type="long" />\n')
+                shift += 1
+            for dataset in pan.datasets:
+                gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].gene_families_map_count_mean[fam.name]}" type="float" />\n')
+                shift += 1
+            for comparison in pan.comparisons:
+                gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].gene_families_map_count_FC[fam.name]}" type="float" />\n')
+                gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].gene_families_map_count_p_values[fam.name]}" type="float" />\n')
+                shift += 2
         gexf.write(f'        </attvalues>\n')
         gexf.write(f'      </node>\n')
     gexf.write('    </nodes>\n')
@@ -203,7 +230,7 @@ def writeGEXFend(gexf):
     gexf.write("  </graph>")
     gexf.write("</gexf>")
 
-def writeGEXF(output, light = True, soft_core = 0.95, compress=False):
+def writeGEXF(output, light = True, soft_core = 0.95, add_sample_map_counts = False, compress=False):
     txt = "Writing the gexf file for the pangenome graph..."
     if light:
         txt = "Writing the light gexf file for the pangenome graph..."
@@ -212,8 +239,8 @@ def writeGEXF(output, light = True, soft_core = 0.95, compress=False):
     outname += "_light" if light else ""
     outname += ".gexf"
     with write_compressed_or_not(outname,compress) as gexf:
-        writeGEXFheader(gexf, light)
-        writeGEXFnodes(gexf, light)
+        writeGEXFheader(gexf, light, add_sample_map_counts)
+        writeGEXFnodes(gexf, light, add_sample_map_counts)
         writeGEXFedges(gexf, light)
         writeGEXFend(gexf)
     logging.getLogger().info(f"Done writing the gexf file : '{outname}'")
@@ -549,6 +576,8 @@ def writeFlatFiles(pangenome, output, cpu = 1, soft_core = 0.95, dup_margin = 0.
     needGraph = False
     needPartitions = False
     needSpots = False
+    needSamples = False
+    needComparisons = True
     needRegions = False
 
     if csv or genePA or gexf or light_gexf or projection or stats or json or partitions or regions or spots or families_tsv or borders:
@@ -559,12 +588,14 @@ def writeFlatFiles(pangenome, output, cpu = 1, soft_core = 0.95, dup_margin = 0.
         needPartitions = True
     if gexf or light_gexf or json:
         needGraph = True
+        needSamples = True
+        needComparisons = True
     if regions or spots or borders:
         needRegions = True
     if spots or borders:
         needSpots = True
 
-    checkPangenomeInfo(pan, needAnnotations=needAnnotations, needFamilies=needFamilies, needGraph=needGraph, needPartitions= needPartitions, needRGP = needRegions, needSpots = needSpots)
+    checkPangenomeInfo(pan, needAnnotations=needAnnotations, needFamilies=needFamilies, needGraph=needGraph, needPartitions= needPartitions, needRGP = needRegions, needSpots = needSpots, needSamples = needSamples, needComparisons = needComparisons)
     pan.getIndex()#make the index because it will be used most likely
     with Pool(processes = cpu) as p:
         if csv:
@@ -572,9 +603,9 @@ def writeFlatFiles(pangenome, output, cpu = 1, soft_core = 0.95, dup_margin = 0.
         if genePA:
             processes.append(p.apply_async(func = writeGenePresenceAbsence, args = (output, compress)))
         if gexf:
-            processes.append(p.apply_async(func = writeGEXF, args = (output, False, soft_core, compress)))
+            processes.append(p.apply_async(func = writeGEXF, args = (output, False, True if len(pan.samples) > 0 else False, soft_core, compress)))
         if light_gexf:
-            processes.append(p.apply_async(func = writeGEXF, args = (output, True, soft_core, compress)))
+            processes.append(p.apply_async(func = writeGEXF, args = (output, True, True if len(pan.samples) > 0 else False, soft_core, compress)))
         if projection:
             processes.append(p.apply_async(func = writeProjections, args = (output, compress)))
         if stats:

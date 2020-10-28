@@ -8,10 +8,13 @@ import sys
 #installed libraries
 from tqdm import tqdm
 import tables
+import pdb
 
 #local libraries
 from ppanggolin.genome import Organism, Gene, RNA
 from ppanggolin.region import Spot
+from ppanggolin.sample import Sample
+from ppanggolin.compare import Dataset, Comparison
 
 def getNumberOfOrganisms(pangenome):
     """ standalone function to get the number of organisms in a pangenome"""
@@ -56,6 +59,14 @@ def getStatus(pangenome, pangenomeFile):
     if hasattr(statusGroup._v_attrs, "spots"):
         if statusGroup._v_attrs.spots:
             pangenome.status["spots"] = "inFile"
+    
+    if hasattr(statusGroup._v_attrs, "samples"):
+        if statusGroup._v_attrs.spots:
+            pangenome.status["samples"] = "inFile"
+    
+    if hasattr(statusGroup._v_attrs, "comparisons"):
+        if statusGroup._v_attrs.comparisons:
+            pangenome.status["comparisons"] = "inFile"
 
     if "/info" in h5f:
         infoGroup = h5f.root.info
@@ -187,7 +198,6 @@ def readGeneSequences(pangenome, h5f, show_bar = True):
     bar.close()
     pangenome.status["geneSequences"] = "Loaded"
 
-
 def readRGP(pangenome, h5f, show_bar = True):
     table = h5f.root.RGP
 
@@ -216,6 +226,51 @@ def readSpots(pangenome, h5f, show_bar = True):
     bar.close()
     pangenome.addSpots(spots.values())
     pangenome.status["spots"] = "Loaded"
+
+def readSamples(pangenome, h5f, show_bar = True):
+    table = h5f.root.samples 
+    #bar = tqdm(range(int(int(table.nrows) / pangenome.number_of_geneFamilies())), unit= "sample", disable=not show_bar)
+    samples = {}
+    curr_sample = None
+    for row in read_chunks(table):
+        if row["sample"].decode() not in samples:
+            curr_sample = Sample(row["sample"].decode())
+            samples[curr_sample.ID] = curr_sample
+        curr_sample.gene_families_map_count[row["gene_family"].decode()] = int(row["count"])
+        if row["gene_family"].decode() == "GUT_GENOME218257_CDS_0011":
+            print("read : "+str(curr_sample.ID)+"   "+row["sample"].decode()+"     "+str(int(row["count"])))
+        #bar.update()
+    #bar.close()
+    pangenome.addSamples(samples)
+    pangenome.status["samples"] = "Loaded"
+
+def readComparison(pangenome, h5f, show_bar = True):
+    table = h5f.root.datasets
+    #bar = tqdm(range(int(int(table.nrows) / pangenome.number_of_geneFamilies())), unit= "sample", disable=not show_bar)
+    datasets = {}
+    for row in read_chunks(table):
+        curr_dataset = datasets.get(row["dataset"].decode())
+        if curr_dataset is None:
+            curr_dataset = Dataset(row["dataset"].decode())
+            datasets[row["dataset"].decode()] = curr_dataset
+        curr_dataset.samples_dataset.add(pangenome.samples[row["sample"].decode()])
+        #bar.update()
+    #bar.close()
+    print(datasets["SPA"].gene_families_map_count_mean)
+    pangenome.addDatasets(datasets)
+    table = h5f.root.comparisons
+    #bar = tqdm(range(int(int(table.nrows) / pangenome.number_of_geneFamilies())), unit= "sample", disable=not show_bar)
+    comparisons = {}
+    for row in read_chunks(table):
+        comparisons[row["comparison"].decode()] = Comparison(row["comparison"].decode(), pangenome.datasets[row["dataset1"].decode()], pangenome.datasets[row["dataset2"].decode()])
+        
+        pdb.set_trace()
+        print(comparisons[row["comparison"].decode()].gene_families_map_count_mean_FC)
+        print(comparisons[row["comparison"].decode()].gene_families_map_count_p_values)
+        #bar.update()
+    #bar.close()
+    pangenome.addComparisons(comparisons)
+    pangenome.status["comparisons"] = "Loaded"
 
 def readAnnotation(pangenome, h5f, show_bar = True):
     annotations = h5f.root.annotations
@@ -269,6 +324,8 @@ def readInfo(h5f):
             print(f"RGPs : {infoGroup._v_attrs['numberOfRGP']}")
         if 'numberOfSpots' in infoGroup._v_attrs._f_list():
             print(f"Spots : {infoGroup._v_attrs['numberOfSpots']}")
+        if 'numberOfSamples' in infoGroup._v_attrs._f_list():
+            print(f"Samples : {infoGroup._v_attrs['numberOfSamples']}")
 
 def readParameters(h5f):
     if "/info" in h5f:
@@ -279,7 +336,7 @@ def readParameters(h5f):
                 for key2, val in dic.items():
                     print(f"    {key2} : {val}")
 
-def readPangenome(pangenome, annotation = False, geneFamilies = False, graph = False, rgp = False, spots = False, geneSequences = False, show_bar=True):
+def readPangenome(pangenome, annotation = False, geneFamilies = False, graph = False, rgp = False, spots = False, geneSequences = False, samples = False, comparisons=False, show_bar=True):
     """
         Reads a previously written pangenome, with all of its parts, depending on what is asked, with regards to what is filled in the 'status' field of the hdf5 file.
     """
@@ -327,17 +384,31 @@ def readPangenome(pangenome, annotation = False, geneFamilies = False, graph = F
             readSpots(pangenome, h5f, show_bar = show_bar)
         else:
             raise Exception(f"The pangenome in file '{filename}' does not have spots information, or has been improperly filled")
+    if samples:
+        if h5f.root.status._v_attrs.samples:
+            logging.getLogger().info("Reading the samples...")
+            readSamples(pangenome, h5f, show_bar = show_bar)
+        else:
+            raise Exception(f"The pangenome in file '{filename}' does not have samples information, or has been improperly filled")
+    if comparisons:
+        if h5f.root.status._v_attrs.comparisons:
+            logging.getLogger().info("Reading the comparisons...")
+            readComparison(pangenome, h5f, show_bar = show_bar)
+        else:
+            raise Exception(f"The pangenome in file '{filename}' does not have comparison information, or has been improperly filled")
     h5f.close()
 
-def checkPangenomeInfo(pangenome, needAnnotations = False, needFamilies = False, needGraph = False, needPartitions = False, needRGP = False, needSpots = False, needGeneSequences = False, show_bar=True):
+def checkPangenomeInfo(pangenome, needAnnotations = False, needFamilies = False, needGraph = False, needPartitions = False, needRGP = False, needSpots = False, needSamples = False, needComparisons = False, needGeneSequences = False, show_bar=True):
     """defines what needs to be read depending on what is needed, and automatically checks if the required elements have been computed with regards to the pangenome.status"""
     annotation = False
     geneFamilies = False
     graph = False
     rgp = False
     spots = False
+    samples = False
     geneSequences = False
-
+    comparisons = False
+    print("needComparisons :"+str(needComparisons))
     if needAnnotations:
         if pangenome.status["genomesAnnotated"] == "inFile":
             annotation = True
@@ -366,11 +437,23 @@ def checkPangenomeInfo(pangenome, needAnnotations = False, needFamilies = False,
             spots = True
         elif not pangenome.status["spots"] in ["Computed","Loaded"]:
             raise Exception("Your pangenome spots of insertion have not been predicted. See the 'spot' subcommand")
+    if needSamples:
+       if pangenome.status["samples"] == "inFile":
+           samples = True
+        #elif not pangenome.status["samples"] in ["Computed","Loaded"]:
+        #    raise Exception("Your pangenome samples have not been computed. See the 'map' subcommand")
+    print(pangenome.status)
+    print(needComparisons)
+    if needComparisons:
+        if pangenome.status["comparisons"] == "inFile":
+            comparisons = True
+        #elif not pangenome.status["comparisons"] in ["Computed","Loaded"]:
+        #    raise Exception("Your pangenome comparisons have not been computed. See the 'map' subcommand")
     if needGeneSequences:
         if pangenome.status["geneSequences"] == "inFile":
             geneSequences = True
         elif not pangenome.status["geneSequences"] in ["Computed","Loaded"]:
             raise Exception("Your pangenome does not include gene sequences. This is possible only if you provided your own cluster file with the 'cluster' subcommand")
-
-    if annotation or geneFamilies or graph or rgp or spots or geneSequences:#if anything is true, else we need nothing.
-        readPangenome(pangenome, annotation=annotation, geneFamilies=geneFamilies, graph=graph, rgp = rgp, spots = spots, geneSequences=geneSequences, show_bar=show_bar)
+        
+    if annotation or geneFamilies or graph or rgp or spots or geneSequences or samples or comparisons:#if anything is true, else we need nothing.
+        readPangenome(pangenome, annotation=annotation, geneFamilies=geneFamilies, graph=graph, rgp = rgp, spots = spots, geneSequences = geneSequences, samples = samples, comparisons = comparisons, show_bar = show_bar)

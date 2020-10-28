@@ -323,6 +323,98 @@ def writeSpots(pangenome, h5f, force, show_bar=True):
     bar.close()
     SpoTable.flush()
 
+def SampleDesc(IDsampleLen, GeneFamLen):
+    return {
+            'sample': tables.StringCol(itemsize=IDsampleLen),
+            'gene_family': tables.StringCol(itemsize=GeneFamLen),
+            'count': tables.UInt32Col()
+        }
+
+def getIDsampleLen(pangenome):
+    IDsampleLen = 1
+    for IDsample in pangenome.samples:
+        if len(IDsample) > IDsampleLen:
+            IDsampleLen = len(IDsample)
+    return IDsampleLen
+
+def writeSamples(pangenome, h5f, force, show_bar=True):
+    if '/samples' in h5f and force is True:
+        logging.getLogger().info("Updating the formerly computed samples")
+        h5f.remove_node("/","samples")
+    
+    SampleTable = h5f.create_table("/", "samples", SampleDesc(getIDsampleLen(pangenome), getGeneFamLen(pangenome)[0]), expectedrows= len(pangenome.samples)*pangenome.number_of_geneFamilies())
+    SampleRow = SampleTable.row
+    bar = tqdm(pangenome.samples, unit="sample", disable = not show_bar)
+    for IDsample, sample in pangenome.samples.items():
+        for gene_family, count in sample.gene_families_map_count.items():
+            SampleRow["sample"] = sample.ID
+            SampleRow["gene_family"] = gene_family
+            SampleRow["count"] = count
+            SampleRow.append()
+            if gene_family == "GUT_GENOME218257_CDS_0011":
+                print("write : "+str(sample.ID)+"   "+str(IDsample)+"     "+str(count))
+        bar.update()
+    bar.close()
+    SampleTable.flush()
+
+def DatasetDesc(IDdatasetLen, IDsampleLen):
+    return {
+            'dataset': tables.StringCol(itemsize=IDdatasetLen),
+            'sample': tables.StringCol(itemsize=IDsampleLen)
+        }
+
+def ComparisonDesc(IDcomparaisonLen, IDdatasetLen):
+    return {
+            'comparison': tables.StringCol(itemsize=IDcomparaisonLen),
+            'dataset1': tables.StringCol(itemsize=IDdatasetLen),
+            'dataset2': tables.StringCol(itemsize=IDdatasetLen),
+        }
+
+def getIDcomparisonLen(pangenome):
+    IDcomparaisonLen = 1
+    for IDcomparaison in pangenome.comparisons:
+        if len(IDcomparaison) > IDcomparaisonLen:
+            IDcomparaisonLen = len(IDcomparaison)
+    return IDcomparaisonLen
+
+def getIDdatasetLen(pangenome):
+    IDdatasetLen = 1
+    for IDdataset in pangenome.datasets:
+        if len(IDdataset) > IDdatasetLen:
+            IDdatasetLen = len(IDdataset)
+    return IDdatasetLen
+
+def writeComparisons(pangenome, h5f, force, show_bar=True):
+    if '/datasets' in h5f and force is True:
+        logging.getLogger().info("Updating the formerly computed datasets")
+        h5f.remove_node("/","datasets")
+    if '/comparisons' in h5f and force is True:
+        logging.getLogger().info("Updating the formerly computed comparisons")
+        h5f.remove_node("/","comparisons")
+    
+    DatasetTable = h5f.create_table("/", "datasets", DatasetDesc(getIDdatasetLen(pangenome), getIDsampleLen(pangenome)), expectedrows = len(pangenome.samples)*pangenome.number_of_geneFamilies())
+    DatasetRow = DatasetTable.row
+    bar = tqdm(pangenome.datasets, unit="dataset", disable = not show_bar)
+    for IDdataset, dataset in pangenome.datasets.items():
+        for sample in dataset.samples_dataset:
+            DatasetRow["dataset"] = dataset.ID
+            DatasetRow["sample"] = sample.ID
+            DatasetRow.append()
+        bar.update()
+    bar.close()
+    DatasetTable.flush()
+
+    ComparisonsTable = h5f.create_table("/", "comparisons", ComparisonDesc(getIDcomparisonLen(pangenome), getIDdatasetLen(pangenome)), expectedrows= len(pangenome.samples)*pangenome.number_of_geneFamilies())
+    ComparisonsRow = ComparisonsTable.row
+    bar = tqdm(pangenome.comparisons, unit="comparison", disable = not show_bar)
+    for IDComparison, comparison in pangenome.comparisons.items():
+        ComparisonsRow["comparison"] = comparison.ID
+        ComparisonsRow["dataset1"] = comparison.dataset1.ID
+        ComparisonsRow["dataset2"] = comparison.dataset2.ID
+        ComparisonsRow.append()
+        bar.update()
+    bar.close()
+    ComparisonsTable.flush()
 
 def writeStatus(pangenome, h5f):
     if "/status" in h5f:#if statuses are already written
@@ -338,6 +430,8 @@ def writeStatus(pangenome, h5f):
     statusGroup._v_attrs.defragmented = True if pangenome.status["defragmented"] in ["Computed","Loaded","inFile"] else False
     statusGroup._v_attrs.predictedRGP = True if pangenome.status["predictedRGP"] in  ["Computed","Loaded","inFile"] else False
     statusGroup._v_attrs.spots = True if pangenome.status["spots"] in ["Computed","Loaded","inFile"] else False
+    statusGroup._v_attrs.samples = True if pangenome.status["samples"] in ["Computed","Loaded","inFile"] else False
+    statusGroup._v_attrs.comparisons = True if pangenome.status["comparisons"] in ["Computed","Loaded","inFile"] else False
 
     statusGroup._v_attrs.version = pkg_resources.get_distribution("ppanggolin").version
 
@@ -401,6 +495,11 @@ def writeInfo(pangenome, h5f):
         infoGroup._v_attrs.numberOfRGP = len(pangenome.regions)
     if pangenome.status["spots"] in ["Computed", "Loaded"]:
         infoGroup._v_attrs.numberOfSpots = len(pangenome.spots)
+    if pangenome.status["spots"] in ["Computed", "Loaded"]:
+        infoGroup._v_attrs.numberOfSamples = len(pangenome.samples)
+    if pangenome.status["comparisons"] in ["Computed", "Loaded"]:
+        infoGroup._v_attrs.numberOfDatasets = len(pangenome.datasets)
+        infoGroup._v_attrs.numberOfComparisons = len(pangenome.comparisons)
 
     infoGroup._v_attrs.parameters = pangenome.parameters#saving the pangenome parameters
 
@@ -522,9 +621,20 @@ def writePangenome(pangenome, filename, force, show_bar = True):
         logging.getLogger().info("Writing Spots of Insertion...")
         writeSpots(pangenome, h5f, force, show_bar=show_bar)
         pangenome.status['spots'] = "Loaded"
+    
+    if pangenome.status["samples"] == "Computed":
+        logging.getLogger().info("Writing Samples...")
+        writeSamples(pangenome, h5f, force, show_bar=show_bar)
+        pangenome.status['samples'] = "Loaded"
+    print(pangenome.status)
+    if pangenome.status["comparisons"] == "Computed":
+        logging.getLogger().info("Writing Compararisons...")
+        writeComparisons(pangenome, h5f, force, show_bar=show_bar)
+        pangenome.status['comparisons'] = "Loaded"
 
+    if pangenome.status["genomesAnnotated"] == "Loaded":
+        writeInfo(pangenome, h5f)
     writeStatus(pangenome, h5f)
-    writeInfo(pangenome, h5f)
-
+    
     h5f.close()
     logging.getLogger().info(f"Done writing the pangenome. It is in file : {filename}")
