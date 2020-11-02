@@ -322,7 +322,6 @@ def align(pangenome, proteinFile, output, tmpdir, identity = 0.8, coverage=0.8, 
         alignFile = alignSeqToPang(tmpPangFile, protFileObj, output, newtmpdir, cpu, defrag, identity, coverage)
 
     prot2pang = readAlignments(alignFile, pangenome)
-    
 
     if getinfo:
         getProtInfo(prot2pang, pangenome, output, cpu, draw_related)
