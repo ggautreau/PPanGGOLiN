@@ -109,59 +109,77 @@ def writeJSON(output, compress):
         json.write("}")
     logging.getLogger().info(f"Done writing the json file : '{outname}'")
 
-def writeGEXFheader(gexf, light, add_sample_map_counts = False):
+def writeGEXFheader(gexf, light, add_sample_map_counts = False, add_spots = False):
     index = []
     if not light:
         index = pan.getIndex()#has been computed already
     gexf.write('<?xml version="1.1" encoding="UTF-8"?>\n<gexf xmlns:viz="http://www.gexf.net/1.2draft/viz" xmlns="http://www.gexf.net/1.2draft" version="1.2">\n')
     gexf.write('  <graph mode="static" defaultedgetype="undirected">\n')
     gexf.write('    <attributes class="node" mode="static">\n')
-    gexf.write('      <attribute id="0" title="nb_genes" type="long" />\n')
-    gexf.write('      <attribute id="1" title="name" type="string" />\n')
-    gexf.write('      <attribute id="2" title="product" type="string" />\n')
-    gexf.write('      <attribute id="3" title="type" type="string" />\n')
-    gexf.write('      <attribute id="4" title="partition" type="string" />\n')
-    gexf.write('      <attribute id="5" title="subpartition" type="string" />\n')
-    gexf.write('      <attribute id="6" title="partition_exact" type="string" />\n')
-    gexf.write('      <attribute id="7" title="partition_soft" type="string" />\n')
-    gexf.write('      <attribute id="8" title="length_avg" type="double" />\n')
-    gexf.write('      <attribute id="9" title="length_med" type="long" />\n')
-    gexf.write('      <attribute id="10" title="nb_organisms" type="long" />\n')
+    gexf.write('      <attribute id="1" title="nb_genes" type="long" />\n')
+    gexf.write('      <attribute id="2" title="type" type="string" />\n')
+    gexf.write('      <attribute id="3" title="partition" type="string" />\n')
+    gexf.write('      <attribute id="4" title="subpartition" type="string" />\n')
+    gexf.write('      <attribute id="5" title="partition_exact" type="string" />\n')
+    gexf.write('      <attribute id="6" title="partition_soft" type="string" />\n')
+    gexf.write('      <attribute id="7" title="length_avg" type="double" />\n')
+    gexf.write('      <attribute id="8" title="length_med" type="long" />\n')
+    gexf.write('      <attribute id="9" title="nb_organisms" type="long" />\n')
+    gexf.write('      <attribute id="10" title="most_common_names" type="string" />\n')
+    gexf.write('      <attribute id="11" title="most_common_product" type="string" />\n')
+    gexf.write('      <attribute id="12" title="short_name" type="string" />\n')
+    gexf.write('      <attribute id="13" title="product_name" type="string" />\n')
+    gexf.write('      <attribute id="14" title="eggNOG_ortholog" type="string" />\n')
+    gexf.write('      <attribute id="15" title="COG" type="string" />\n')
+    gexf.write('      <attribute id="16" title="GO_terms" type="string" />\n')
+    gexf.write('      <attribute id="17" title="KEGG_KOs" type="string" />\n')
+    gexf.write('      <attribute id="18" title="BiGG_reactions" type="string" />\n')
     if not light:
         for org, orgIndex in index.items():
-            gexf.write(f'      <attribute id="{orgIndex + 12}" title="{org.name}" type="string" />\n')
+            gexf.write(f'      <attribute id="{orgIndex + 19}" title="{org.name}" type="string" />\n')
     shift = 0
     if add_sample_map_counts:
-        shift = 2 * len(index) + 12
+        shift = 2 * len(index) + 19
         for sample in pan.samples:
             gexf.write(f'      <attribute id="{shift}" title="{pan.samples[sample].ID}" type="long" />\n')
             shift += 1
         for dataset in pan.datasets:
-            gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].ID}" type="float" />\n')
+            gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].ID}_mean" type="float" />\n')
+            shift += 1
+            gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].ID}_sd" type="float" />\n')
+            shift += 1
+            gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].ID}_median" type="float" />\n')
+            shift += 1
+            gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].ID}_IQR" type="float" />\n')
             shift += 1
         for comparison in pan.comparisons:
-            gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].ID}_FC" type="float" />\n')
+            gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].ID}_FC_mean" type="float" />\n')
+            shift += 1
             gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].ID}_p_values" type="float" />\n')
-            shift += 2
+            shift += 1
+    if add_spots:
+        gexf.write(f'      <attribute id="{shift}" title="spots" type="string" />\n')
+        shift += 1
     gexf.write('    </attributes>\n')
     gexf.write('    <attributes class="edge" mode="static">\n')
     gexf.write('      <attribute id="11" title="nb_genes" type="long" />\n')
     if not light:
         for org, orgIndex in index.items():
-            gexf.write(f'      <attribute id="{orgIndex + len(index) + 12}" title="{org.name}" type="long" />\n')
+            gexf.write(f'      <attribute id="{orgIndex + len(index) + 19}" title="{org.name}" type="long" />\n')
     # gexf.write('      <attribute id="12" title="nb_organisms" type="long" />\n')#useless because it's the weight of the edge
     gexf.write('    </attributes>\n')
     gexf.write('    <meta>\n')
     gexf.write(f'      <creator>PPanGGOLiN {pkg_resources.get_distribution("ppanggolin").version}</creator>\n')
     gexf.write('    </meta>\n')
 
-def writeGEXFnodes(gexf, light, add_sample_map_counts = False, soft_core = 0.95):
+def writeGEXFnodes(gexf, light, add_sample_map_counts = False, add_spots = False, soft_core = 0.95):
     gexf.write('    <nodes>\n')
     colors = {"persistent":'a="0" b="7" g="165" r="247"','shell':'a="0" b="96" g="216" r="0"', 'cloud':'a="0" b="255" g="222" r="121"'}
     index = []
     if not light:
         index = pan.getIndex()
-
+    print("len(pan.comparisons)"+str(len(pan.comparisons)))
+    print("add_sample_map_counts"+str(add_sample_map_counts))
     for fam in pan.geneFamilies:
         name = Counter()
         product = Counter()
@@ -177,33 +195,57 @@ def writeGEXFnodes(gexf, light, add_sample_map_counts = False, soft_core = 0.95)
         gexf.write(f'        <viz:color {colors[fam.namedPartition]} />\n')
         gexf.write(f'        <viz:size value="{len(fam.organisms)}" />\n')
         gexf.write(f'        <attvalues>\n')
-        gexf.write(f'          <attvalue for="0" value="{len(fam.genes)}" />\n')
-        gexf.write(f'          <attvalue for="1" value="{name.most_common(1)[0][0]}" />\n')
-        gexf.write(f'          <attvalue for="2" value="{product.most_common(1)[0][0]}" />\n')
-        gexf.write(f'          <attvalue for="3" value="{gtype.most_common(1)[0][0]}" />\n')
-        gexf.write(f'          <attvalue for="4" value="{fam.namedPartition}" />\n')
-        gexf.write(f'          <attvalue for="5" value="{fam.partition}" />\n')
-        gexf.write(f'          <attvalue for="6" value="{"exact_accessory" if len(fam.organisms) != len(pan.organisms) else "exact_core"}" />\n')
-        gexf.write(f'          <attvalue for="7" value="{"soft_core" if len(fam.organisms) > (len(pan.organisms)*soft_core) else "soft_accessory"}" />\n')
-        gexf.write(f'          <attvalue for="8" value="{round(sum(l) / len(l),2)}" />\n')
-        gexf.write(f'          <attvalue for="9" value="{ int(median(l))}" />\n')
-        gexf.write(f'          <attvalue for="10" value="{len(fam.organisms)}" />\n')
+        gexf.write(f'          <attvalue for="1" value="{len(fam.genes)}" />\n')
+        gexf.write(f'          <attvalue for="2" value="{gtype.most_common(1)[0][0]}" />\n')
+        gexf.write(f'          <attvalue for="3" value="{fam.namedPartition}" />\n')
+        gexf.write(f'          <attvalue for="4" value="{fam.partition}" />\n')
+        gexf.write(f'          <attvalue for="5" value="{"exact_accessory" if len(fam.organisms) != len(pan.organisms) else "exact_core"}" />\n')
+        gexf.write(f'          <attvalue for="6" value="{"soft_core" if len(fam.organisms) > (len(pan.organisms)*soft_core) else "soft_accessory"}" />\n')
+        gexf.write(f'          <attvalue for="7" value="{round(sum(l) / len(l),2)}" />\n')
+        gexf.write(f'          <attvalue for="8" value="{int(median(l))}" />\n')
+        gexf.write(f'          <attvalue for="9" value="{len(fam.organisms)}" />\n')
+        gexf.write(f'          <attvalue for="10" value="{name.most_common(1)[0][0]}" />\n')
+        gexf.write(f'          <attvalue for="11" value="{product.most_common(1)[0][0]}" />\n')
+        gexf.write(f'          <attvalue for="12" value="{fam.short_name}" />\n')
+        gexf.write(f'          <attvalue for="13" value="{fam.product_name}" />\n')
+        gexf.write(f'          <attvalue for="14" value="{fam.eggNOG_ortholog}" />\n')
+        gexf.write(f'          <attvalue for="15" value="{fam.COG}" />\n')
+        gexf.write(f'          <attvalue for="16" value="{fam.GO_terms}" />\n')
+        gexf.write(f'          <attvalue for="17" value="{fam.KEGG_KOs}" />\n')
+        gexf.write(f'          <attvalue for="18" value="{fam.GO_terms}" />\n')
+        gexf.write(f'          <attvalue for="19" value="{fam.BiGG_reactions}" />\n')
+
         if not light:
             for org, genes in fam.getOrgDict().items():
-                gexf.write(f'          <attvalue for="{index[org]+12}" value="{"|".join([ gene.ID if gene.local_identifier == "" else gene.local_identifier for gene in genes])}" />\n')
+                gexf.write(f'          <attvalue for="{index[org]+19}" value="{"|".join([ gene.ID if gene.local_identifier == "" else gene.local_identifier for gene in genes])}" />\n')
         shift = 0
         if add_sample_map_counts:
-            shift = 2 * len(index) + 12
+            shift = 2 * len(index) + 19
             for sample in pan.samples:
-                gexf.write(f'      <attribute id="{shift}" title="{pan.samples[sample].gene_families_map_count[fam.name]}" type="long" />\n')
+                gexf.write(f'      <attvalue for="{shift}" value="{pan.samples[sample].gene_families_map_count[fam.name]}"/>\n')
                 shift += 1
             for dataset in pan.datasets:
-                gexf.write(f'      <attribute id="{shift}" title="{pan.datasets[dataset].gene_families_map_count_mean[fam.name]}" type="float" />\n')
+                gexf.write(f'      <attvalue for="{shift}" value="{pan.datasets[dataset].gene_families_map_count_mean[fam.name]}"/>\n')
+                shift += 1
+                gexf.write(f'      <attvalue for="{shift}" value="{pan.datasets[dataset].gene_families_map_count_SD[fam.name]}"/>\n')
+                shift += 1
+                gexf.write(f'      <attvalue for="{shift}" value="{pan.datasets[dataset].gene_families_map_count_median[fam.name]}"/>\n')
+                shift += 1
+                gexf.write(f'      <attvalue for="{shift}" value="{pan.datasets[dataset].gene_families_map_count_IQR[fam.name]}"/>\n')
                 shift += 1
             for comparison in pan.comparisons:
-                gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].gene_families_map_count_FC[fam.name]}" type="float" />\n')
-                gexf.write(f'      <attribute id="{shift}" title="{pan.comparisons[comparison].gene_families_map_count_p_values[fam.name]}" type="float" />\n')
-                shift += 2
+                print(comparison)
+                gexf.write(f'      <attvalue for="{shift}" value="{pan.comparisons[comparison].gene_families_map_count_mean_FC[fam.name]}"/>\n')
+                shift += 1
+                gexf.write(f'      <attvalue for="{shift}" value="{pan.comparisons[comparison].gene_families_map_count_p_values[fam.name]}"/>\n')
+                shift += 1
+        if add_spots:
+            spots = []
+            for s in pan.spots:
+                if fam.name in s.families:
+                    spots.append(s)
+            gexf.write(f'      <attvalue for="{shift}" value="{"|".join(spots)}"/>\n')
+            shift += 1
         gexf.write(f'        </attvalues>\n')
         gexf.write(f'      </node>\n')
     gexf.write('    </nodes>\n')
@@ -230,7 +272,7 @@ def writeGEXFend(gexf):
     gexf.write("  </graph>")
     gexf.write("</gexf>")
 
-def writeGEXF(output, light = True, soft_core = 0.95, add_sample_map_counts = False, compress=False):
+def writeGEXF(output, light = True, soft_core = 0.95, add_sample_map_counts = False, add_spots = False, compress=False):
     txt = "Writing the gexf file for the pangenome graph..."
     if light:
         txt = "Writing the light gexf file for the pangenome graph..."
@@ -239,8 +281,8 @@ def writeGEXF(output, light = True, soft_core = 0.95, add_sample_map_counts = Fa
     outname += "_light" if light else ""
     outname += ".gexf"
     with write_compressed_or_not(outname,compress) as gexf:
-        writeGEXFheader(gexf, light, add_sample_map_counts)
-        writeGEXFnodes(gexf, light, add_sample_map_counts)
+        writeGEXFheader(gexf, light, add_sample_map_counts, add_spots)
+        writeGEXFnodes(gexf, light, add_sample_map_counts, add_spots)
         writeGEXFedges(gexf, light)
         writeGEXFend(gexf)
     logging.getLogger().info(f"Done writing the gexf file : '{outname}'")
@@ -590,6 +632,8 @@ def writeFlatFiles(pangenome, output, cpu = 1, soft_core = 0.95, dup_margin = 0.
         needGraph = True
         needSamples = True
         needComparisons = True
+        #needSpots = True
+        #needRegions = True
     if regions or spots or borders:
         needRegions = True
     if spots or borders:
@@ -597,15 +641,16 @@ def writeFlatFiles(pangenome, output, cpu = 1, soft_core = 0.95, dup_margin = 0.
 
     checkPangenomeInfo(pan, needAnnotations=needAnnotations, needFamilies=needFamilies, needGraph=needGraph, needPartitions= needPartitions, needRGP = needRegions, needSpots = needSpots, needSamples = needSamples, needComparisons = needComparisons)
     pan.getIndex()#make the index because it will be used most likely
+    print("len(pan.samples)"+str(len(pan.samples)))
     with Pool(processes = cpu) as p:
         if csv:
             processes.append(p.apply_async(func = writeMatrix, args = (',', "csv", output, compress, True)))
         if genePA:
             processes.append(p.apply_async(func = writeGenePresenceAbsence, args = (output, compress)))
         if gexf:
-            processes.append(p.apply_async(func = writeGEXF, args = (output, False, True if len(pan.samples) > 0 else False, soft_core, compress)))
+            processes.append(p.apply_async(func = writeGEXF, args = (output, False, soft_core, True if len(pan.samples) > 0 else False, True if len(pan.spots) > 0 else False, compress)))
         if light_gexf:
-            processes.append(p.apply_async(func = writeGEXF, args = (output, True, True if len(pan.samples) > 0 else False, soft_core, compress)))
+            processes.append(p.apply_async(func = writeGEXF, args = (output, True, soft_core, True if len(pan.samples) > 0 else False, True if len(pan.spots) > 0 else False, compress)))
         if projection:
             processes.append(p.apply_async(func = writeProjections, args = (output, compress)))
         if stats:

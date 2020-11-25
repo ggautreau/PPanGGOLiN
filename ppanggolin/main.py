@@ -29,6 +29,7 @@ import ppanggolin.info
 import ppanggolin.align
 import ppanggolin.RGP
 import ppanggolin.map
+import ppanggolin.function
 
 def checkTsvSanity(tsv):
     f = open(tsv,"r")
@@ -132,6 +133,8 @@ def cmdLine():
     subs.append(ppanggolin.RGP.spot.spotSubparser(subparsers))
     subs.append(ppanggolin.map.mapReadsOnPang.mapSubparser(subparsers))
     subs.append(ppanggolin.map.compareSamples.compareSubparser(subparsers))
+    subs.append(ppanggolin.function.functionSubparser(subparsers))
+
     ppanggolin.info.infoSubparser(subparsers)#not adding to subs because the 'common' options are not needed for this.
 
     for sub in subs:#add options common to all subcommands
@@ -217,6 +220,8 @@ def main():
         ppanggolin.RGP.spot.launch(args)
     elif args.subcommand == "panrgp":
         ppanggolin.workflow.panRGP.launch(args)
+    elif args.subcommand == "function":
+        ppanggolin.function.launch(args)
 
 if __name__ == "__main__":
     main()

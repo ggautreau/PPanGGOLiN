@@ -151,17 +151,31 @@ def writeGeneSequences(pangenome, h5f, show_bar=True):
     bar.close()
 
 
-def geneFamDesc(maxNameLen, maxSequenceLength, maxPartLen):
+def geneFamDesc(maxNameLen, maxSequenceLength, maxPartLen, maxShort_name, maxProduct_name, maxEggNOG_ortholog, maxCOG, maxGO_terms, maxKEGG_KOs, maxBiGG_reactions):
      return {
         "name": tables.StringCol(itemsize = maxNameLen),
         "protein": tables.StringCol(itemsize=maxSequenceLength),
-        "partition": tables.StringCol(itemsize=maxPartLen)
+        "partition": tables.StringCol(itemsize=maxPartLen),
+        "short_name": tables.StringCol(itemsize=maxShort_name),
+        "product_name": tables.StringCol(itemsize=maxProduct_name),
+        "eggNOG_ortholog": tables.StringCol(itemsize=maxEggNOG_ortholog),
+        "COG": tables.StringCol(itemsize=maxCOG),
+        "GO_terms" : tables.StringCol(itemsize=maxGO_terms),
+        "KEGG_KOs" : tables.StringCol(itemsize=maxKEGG_KOs),
+        "BiGG_reactions" : tables.StringCol(itemsize=maxBiGG_reactions)
         }
 
 def getGeneFamLen(pangenome):
-    maxGeneFamNameLen = 1
-    maxGeneFamSeqLen = 1
-    maxPartLen = 1
+    maxGeneFamNameLen  = 1
+    maxGeneFamSeqLen   = 1
+    maxPartLen         = 1
+    maxShort_name      = 1
+    maxProduct_name    = 1
+    maxEggNOG_ortholog = 1
+    maxCOG             = 1
+    maxGO_terms        = 1
+    maxKEGG_KOs        = 1
+    maxBiGG_reactions  = 1
     for genefam in pangenome.geneFamilies:
         if len(genefam.sequence) > maxGeneFamSeqLen:
             maxGeneFamSeqLen = len(genefam.sequence)
@@ -169,27 +183,45 @@ def getGeneFamLen(pangenome):
             maxGeneFamNameLen = len(genefam.name)
         if len(genefam.partition) > maxPartLen:
             maxPartLen = len(genefam.partition)
-    return maxGeneFamNameLen, maxGeneFamSeqLen, maxPartLen
+        if len(genefam.short_name) > maxShort_name:
+            maxShort_name = len(genefam.short_name)
+        if len(genefam.product_name) > maxProduct_name:
+            maxProduct_name = len(genefam.product_name)
+        if len(genefam.eggNOG_ortholog) > maxEggNOG_ortholog:
+            maxEggNOG_ortholog = len(genefam.eggNOG_ortholog)
+        if len(genefam.GO_terms) > maxGO_terms:
+            maxGO_terms = len(genefam.GO_terms)
+        if len(genefam.KEGG_KOs) > maxKEGG_KOs:
+            maxKEGG_KOs = len(genefam.KEGG_KOs)
+        if len(genefam.BiGG_reactions) > maxBiGG_reactions:
+            maxBiGG_reactions = len(genefam.BiGG_reactions)
+    return maxGeneFamNameLen, maxGeneFamSeqLen, maxPartLen, maxShort_name, maxProduct_name, maxEggNOG_ortholog, maxCOG, maxGO_terms, maxKEGG_KOs, maxBiGG_reactions
 
 def writeGeneFamInfo(pangenome, h5f, force, show_bar=True):
     """
         Writing a table containing the protein sequences of each family
     """
     if '/geneFamiliesInfo' in h5f and force is True:
-        logging.getLogger().info("Erasing the formerly computed gene family representative sequences...")
+        logging.getLogger().info("Erasing the formerly computed gene family info...")
         h5f.remove_node('/', 'geneFamiliesInfo')#erasing the table, and rewriting a new one.
     geneFamSeq = h5f.create_table("/","geneFamiliesInfo",geneFamDesc(*getGeneFamLen(pangenome)), expectedrows=len(pangenome.geneFamilies))
 
     row = geneFamSeq.row
-    bar = tqdm( pangenome.geneFamilies, unit = "gene family", disable = not show_bar)
+    bar = tqdm(pangenome.geneFamilies, unit = "gene family", disable = not show_bar)
     for fam in bar:
-        row["name"] = fam.name
-        row["protein"] = fam.sequence
-        row["partition"] = fam.partition
+        row["name"]            = fam.name
+        row["protein"]         = fam.sequence
+        row["partition"]       = fam.partition
+        row["short_name"]      = fam.short_name
+        row["product_name"]    = fam.product_name
+        row["eggNOG_ortholog"] = fam.eggNOG_ortholog
+        row["COG"]             = fam.COG
+        row["GO_terms"]        = fam.GO_terms
+        row["KEGG_KOs"]        = fam.KEGG_KOs
+        row["BiGG_reactions"]  = fam.BiGG_reactions
         row.append()
     geneFamSeq.flush()
     bar.close()
-
 
 def gene2famDesc(geneFamNameLen, geneIDLen):
     return {
@@ -351,8 +383,8 @@ def writeSamples(pangenome, h5f, force, show_bar=True):
             SampleRow["gene_family"] = gene_family
             SampleRow["count"] = count
             SampleRow.append()
-            if gene_family == "GUT_GENOME218257_CDS_0011":
-                print("write : "+str(sample.ID)+"   "+str(IDsample)+"     "+str(count))
+            #if gene_family == "GUT_GENOME218257_CDS_0011":
+            #    print("write : "+str(sample.ID)+"   "+str(IDsample)+"     "+str(count))
         bar.update()
     bar.close()
     SampleTable.flush()
@@ -368,6 +400,8 @@ def ComparisonDesc(IDcomparaisonLen, IDdatasetLen):
             'comparison': tables.StringCol(itemsize=IDcomparaisonLen),
             'dataset1': tables.StringCol(itemsize=IDdatasetLen),
             'dataset2': tables.StringCol(itemsize=IDdatasetLen),
+            'corrected_pvalue': tables.BoolCol(dflt = False),
+            'paired': tables.BoolCol(dflt = False),
         }
 
 def getIDcomparisonLen(pangenome):
@@ -411,6 +445,8 @@ def writeComparisons(pangenome, h5f, force, show_bar=True):
         ComparisonsRow["comparison"] = comparison.ID
         ComparisonsRow["dataset1"] = comparison.dataset1.ID
         ComparisonsRow["dataset2"] = comparison.dataset2.ID
+        ComparisonsRow["corrected_pvalue"] = comparison.corrected_p_values
+        ComparisonsRow["paired"] = comparison.paired
         ComparisonsRow.append()
         bar.update()
     bar.close()
@@ -594,6 +630,11 @@ def writePangenome(pangenome, filename, force, show_bar = True):
         writeGeneSequences(pangenome, h5f, show_bar=show_bar)
         pangenome.status["geneSequences"] = "Loaded"
 
+    if pangenome.status["fonctionImported"] == "Computed":
+        logging.getLogger().info("Writing gene families information...")
+        writeGeneFamInfo(pangenome, h5f, True, show_bar=show_bar)
+        pangenome.status["fonctionImported"] == "Loaded"
+
     if pangenome.status["genesClustered"] == "Computed":
         logging.getLogger().info("Writing gene families and gene associations...")
         writeGeneFamilies(pangenome, h5f, force, show_bar=show_bar)
@@ -626,7 +667,7 @@ def writePangenome(pangenome, filename, force, show_bar = True):
         logging.getLogger().info("Writing Samples...")
         writeSamples(pangenome, h5f, force, show_bar=show_bar)
         pangenome.status['samples'] = "Loaded"
-    print(pangenome.status)
+    #print(pangenome.status)
     if pangenome.status["comparisons"] == "Computed":
         logging.getLogger().info("Writing Compararisons...")
         writeComparisons(pangenome, h5f, force, show_bar=show_bar)

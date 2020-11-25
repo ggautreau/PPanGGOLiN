@@ -23,14 +23,22 @@ class GeneFamily:
         :param name: The name of the gene family (to be printed in output files)
         :type name: str
         """
-        self.name = str(name)
-        self.ID = ID
-        self._edges = {}
+        self.name        = str(name)
+        self.ID          = ID
+        self._edges      = {}
         self._genePerOrg = defaultdict(set)
-        self.genes = set()
-        self.removed = False#for the repeated family not added in the main graph
-        self.sequence = ""
-        self.partition = ""
+        self.genes       = set()
+        self.removed     = False#for the repeated family not added in the main graph
+        self.sequence    = ""
+        self.partition   = ""
+
+        self.short_name      = ""
+        self.product_name    = ""
+        self.eggNOG_ortholog = ""
+        self.COG             = ""
+        self.GO_terms        = ""
+        self.KEGG_KOs        = ""
+        self.BiGG_reactions  = ""
 
     def addSequence(self, seq):
         """Assigns a protein sequence to the gene family.

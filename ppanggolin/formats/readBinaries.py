@@ -61,7 +61,7 @@ def getStatus(pangenome, pangenomeFile):
             pangenome.status["spots"] = "inFile"
     
     if hasattr(statusGroup._v_attrs, "samples"):
-        if statusGroup._v_attrs.spots:
+        if statusGroup._v_attrs.samples:
             pangenome.status["samples"] = "inFile"
     
     if hasattr(statusGroup._v_attrs, "comparisons"):
@@ -180,6 +180,16 @@ def readGeneFamiliesInfo(pangenome, h5f, show_bar = True):
         fam = pangenome.addGeneFamily(row["name"].decode())
         fam.addPartition(row["partition"].decode())
         fam.addSequence(row["protein"].decode())
+        try:
+            fam.short_name      = row["short_name"].decode()
+            fam.product_name    = row["product_name"].decode()
+            fam.eggNOG_ortholog = row["eggNOG_ortholog"].decode()
+            fam.COG             = row["COG"].decode()
+            fam.GO_terms        = row["GO_terms"].decode()
+            fam.KEGG_KOs        = row["KEGG_KOs"].decode()
+            fam.BiGG_reactions  = row["BiGG_reactions"].decode()
+        except ValueError:
+            pass
         bar.update()
     bar.close()
     if h5f.root.status._v_attrs.Partitionned:
@@ -237,8 +247,8 @@ def readSamples(pangenome, h5f, show_bar = True):
             curr_sample = Sample(row["sample"].decode())
             samples[curr_sample.ID] = curr_sample
         curr_sample.gene_families_map_count[row["gene_family"].decode()] = int(row["count"])
-        if row["gene_family"].decode() == "GUT_GENOME218257_CDS_0011":
-            print("read : "+str(curr_sample.ID)+"   "+row["sample"].decode()+"     "+str(int(row["count"])))
+        #if row["gene_family"].decode() == "GUT_GENOME218257_CDS_0011":
+        #    print("read : "+str(curr_sample.ID)+"   "+row["sample"].decode()+"     "+str(int(row["count"])))
         #bar.update()
     #bar.close()
     pangenome.addSamples(samples)
@@ -256,17 +266,19 @@ def readComparison(pangenome, h5f, show_bar = True):
         curr_dataset.samples_dataset.add(pangenome.samples[row["sample"].decode()])
         #bar.update()
     #bar.close()
-    print(datasets["SPA"].gene_families_map_count_mean)
+    #print(datasets["SPA"].gene_families_map_count_mean)
     pangenome.addDatasets(datasets)
     table = h5f.root.comparisons
     #bar = tqdm(range(int(int(table.nrows) / pangenome.number_of_geneFamilies())), unit= "sample", disable=not show_bar)
     comparisons = {}
     for row in read_chunks(table):
-        comparisons[row["comparison"].decode()] = Comparison(row["comparison"].decode(), pangenome.datasets[row["dataset1"].decode()], pangenome.datasets[row["dataset2"].decode()])
+        c = Comparison(row["comparison"].decode(), pangenome.datasets[row["dataset1"].decode()], pangenome.datasets[row["dataset2"].decode()])
+        c.corrected_p_values = row["corrected_pvalue"]
+        c.paired = row["paired"]
+        comparisons[c.ID] = c
         
-        pdb.set_trace()
-        print(comparisons[row["comparison"].decode()].gene_families_map_count_mean_FC)
-        print(comparisons[row["comparison"].decode()].gene_families_map_count_p_values)
+        #print(comparisons[row["comparison"].decode()].gene_families_map_count_mean_FC)
+        #print(comparisons[row["comparison"].decode()].gene_families_map_count_p_values)
         #bar.update()
     #bar.close()
     pangenome.addComparisons(comparisons)
@@ -385,6 +397,7 @@ def readPangenome(pangenome, annotation = False, geneFamilies = False, graph = F
         else:
             raise Exception(f"The pangenome in file '{filename}' does not have spots information, or has been improperly filled")
     if samples:
+        print("h5f.root.status._v_attrs.samples:"+str(h5f.root.status._v_attrs.samples))
         if h5f.root.status._v_attrs.samples:
             logging.getLogger().info("Reading the samples...")
             readSamples(pangenome, h5f, show_bar = show_bar)
@@ -438,12 +451,11 @@ def checkPangenomeInfo(pangenome, needAnnotations = False, needFamilies = False,
         elif not pangenome.status["spots"] in ["Computed","Loaded"]:
             raise Exception("Your pangenome spots of insertion have not been predicted. See the 'spot' subcommand")
     if needSamples:
-       if pangenome.status["samples"] == "inFile":
+        print("pangenome.status[\"samples\"] :"+str(pangenome.status["samples"]))
+        if pangenome.status["samples"] == "inFile":
            samples = True
         #elif not pangenome.status["samples"] in ["Computed","Loaded"]:
         #    raise Exception("Your pangenome samples have not been computed. See the 'map' subcommand")
-    print(pangenome.status)
-    print(needComparisons)
     if needComparisons:
         if pangenome.status["comparisons"] == "inFile":
             comparisons = True
