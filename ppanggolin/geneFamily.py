@@ -2,60 +2,64 @@
 # coding: utf8
 
 # default libraries
+from __future__ import annotations
 from collections import defaultdict
+import logging
 
 # installed libraries
+from typing import Dict, Set, List
+
 import gmpy2
 
 # local libraries
-from ppanggolin.genome import Gene
+from ppanggolin.edge import Edge
+from ppanggolin.genome import Gene, Organism
 
 
 class GeneFamily:
-    """This represents a single gene family. It will be a node in the pangenome graph, and be aware of its genes and edges.
+    """
+    This represents a single gene family. It will be a node in the pangenome graph, and be aware of its genes and edges.
 
+    :param family_id: The internal identifier to give to the gene family
+    :type family_id: any
+    :param name: The name of the gene family (to be printed in output files)
+    :type name: str
     """
 
-    def __init__(self, ID, name):
-        """Constructor method
-
-        :param ID: The internal identifier to give to the gene family
-        :type ID: any
-        :param name: The name of the gene family (to be printed in output files)
-        :type name: str
-        """
+    def __init__(self, family_id: int, name: str):
         self.name = str(name)
-        self.ID = ID
+        self.ID = family_id
         self._edges = {}
         self._genePerOrg = defaultdict(set)
         self.genes = set()
         self.removed = False  # for the repeated family not added in the main graph
         self.sequence = ""
         self.partition = ""
+        self.spot = set()
+        self.modules = set()
+        self.bitarray = None
 
-    def addSequence(self, seq):
+    def add_sequence(self, seq: str):
         """Assigns a protein sequence to the gene family.
 
         :param seq: the sequence to add to the gene family
-        :type seq: str
         """
         self.sequence = seq
 
-    def addPartition(self, partition):
+    def add_partition(self, partition: str):
         """Assigns a partition to the gene family. It should be the raw partition name provided by NEM.
 
         :param partition: The partition
-        :type partition: str
         """
         self.partition = partition
 
     @property
-    def namedPartition(self):
-        """Reads the :attr:partition attribute and returns a meaningful name
+    def named_partition(self) -> str:
+        """Reads the partition attribute and returns a meaningful name
 
         :raises Exception: If the gene family has no partition assigned
+
         :return: the partition name of the gene family
-        :rtype: str
         """
         if self.partition == "":
             raise Exception("The gene family has not beed associated to a partition")
@@ -68,11 +72,11 @@ class GeneFamily:
         else:
             return "undefined"
 
-    def addGene(self, gene):
+    def add_gene(self, gene: Gene):
         """Add a gene to the gene family, and sets the gene's :attr:family accordingly.
 
         :param gene: the gene to add
-        :type gene: :class:`ppanggolin.genome.Gene`
+
         :raises TypeError: If the provided `gene` is of the wrong type
         """
         if not isinstance(gene, Gene):
@@ -82,22 +86,33 @@ class GeneFamily:
         if hasattr(gene, "organism"):
             self._genePerOrg[gene.organism].add(gene)
 
-    def mkBitarray(self, index):
-        """Produces a bitarray representing the presence / absence of the family in the pangenome using the provided index
+    def mk_bitarray(self, index: Dict[Organism, int], partition: str = 'all'):
+        """Produces a bitarray representing the presence/absence of the family in the pangenome using the provided index
         The bitarray is stored in the :attr:`bitarray` attribute and is a :class:`gmpy2.xmpz` type.
 
-        :param index: The index computed by :func:`ppanggolin.pangenome.Pangenome.getIndex`
-        :type index: dict[:class:`ppanggolin.genome.Organism`, int]
+        :param index: The index computed by :func:`ppanggolin.pan.Pangenome.getIndex`
+        :param partition: partition used to compute bitarray
         """
-        self.bitarray = gmpy2.xmpz(0)  # pylint: disable=no-member
-        for org in self.organisms:
-            self.bitarray[index[org]] = 1
+        self.bitarray = gmpy2.xmpz()  # pylint: disable=no-member
+        if partition == 'all':
+            logging.getLogger().debug(f"all")
+            for org in self.organisms:
+                self.bitarray[index[org]] = 1
+        elif partition in ['shell', 'cloud']:
+            logging.getLogger().debug(f"shell, cloud")
+            if self.named_partition == partition:
+                for org in self.organisms:
+                    self.bitarray[index[org]] = 1
+        elif partition == 'accessory':
+            logging.getLogger().debug(f"accessory")
+            if self.named_partition in ['shell', 'cloud']:
+                for org in self.organisms:
+                    self.bitarray[index[org]] = 1
 
-    def getOrgDict(self):
+    def get_org_dict(self) -> Dict[Organism, Set[Gene]]:
         """Returns the organisms and the genes belonging to the gene family
 
         :return: a dictionnary of organism as key and set of genes as values
-        :rtype: dict[ :class:`ppanggolin.genome.Organism` ,set[:class:`ppanggolin.genome.Gene`]
         """
         try:
             return self._genePerOrg
@@ -105,14 +120,15 @@ class GeneFamily:
             for gene in self.genes:
                 self._genePerOrg[gene.organism].add(gene)
             return self._genePerOrg
+        except Exception:
+            raise Exception("An unexpected error occurs. Please report in our GitHub")
 
-    def getGenesPerOrg(self, org):
+    def get_genes_per_org(self, org: Organism) -> Set[Gene]:
         """Returns the genes belonging to the gene family in the given Organism
 
         :param org: Organism to look for
-        :type org: :class:`ppanggolin.genome.Organism`
+
         :return: a set of gene(s)
-        :rtype: set[:class:`ppanggolin.genome.Gene`]
         """
         try:
             return self._genePerOrg[org]
@@ -120,31 +136,30 @@ class GeneFamily:
             for gene in self.genes:
                 self._genePerOrg[gene.organism].add(gene)
             return self._genePerOrg[org]
+        except Exception:
+            raise Exception("An unexpected error occurs. Please report in our GitHub")
 
     @property
-    def neighbors(self):
-        """Returns all of the :class:`ppanggolin.geneFamily.GeneFamily` that are linked with an edge
+    def neighbors(self) -> Set[GeneFamily]:
+        """Returns all the GeneFamilies that are linked with an edge
 
         :return: Neighbors
-        :rtype: set[:class:`ppanggolin.geneFamily.GeneFamily`]
         """
         return set(self._edges.keys())
 
     @property
-    def edges(self):
-        """Returns all of the :class:`ppanggolin.pangenome.Edge` that are linked to this gene family
+    def edges(self) -> List[Edge]:
+        """Returns all Edges that are linked to this gene family
 
         :return: Edges of the gene family
-        :rtype: list[:class:`ppanggolin.pangenome.Edge`]
         """
         return list(self._edges.values())
 
     @property
-    def organisms(self):
-        """Returns all of the :class:`ppanggolin.genome.Organism` that have this gene family
+    def organisms(self) -> Set[Organism]:
+        """Returns all the Organisms that have this gene family
 
         :return: Organisms that have this gene family
-        :rtype: set[:class:`ppanggolin.genome.Organism`]
         """
         try:
             return set(self._genePerOrg.keys())
@@ -152,3 +167,5 @@ class GeneFamily:
             for gene in self.genes:
                 self._genePerOrg[gene.organism].add(gene)
             return set(self._genePerOrg.keys())
+        except Exception:
+            raise Exception("An unexpected error occurs. Please report in our GitHub")

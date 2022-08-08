@@ -8,68 +8,82 @@ import argparse
 
 # local libraries
 from ppanggolin.pangenome import Pangenome
-from ppanggolin.utils import mkFilename, min_one, check_option_workflow
-from ppanggolin.annotate import annotatePangenome, readAnnotations, getGeneSequencesFromFastas
-from ppanggolin.cluster import clustering, readClustering
-from ppanggolin.graph import computeNeighborsGraph
-from ppanggolin.nem.rarefaction import makeRarefactionCurve
+from ppanggolin.utils import mk_file_name, min_one, check_option_workflow, restricted_float
+from ppanggolin.annotate.annotate import annotate_pangenome, read_annotations, get_gene_sequences_from_fastas
+from ppanggolin.cluster.cluster import clustering, read_clustering
+from ppanggolin.graph.makeGraph import compute_neighbors_graph
+from ppanggolin.nem.rarefaction import make_rarefaction_curve
 from ppanggolin.nem.partition import partition
-from ppanggolin.formats import writePangenome, writeFlatFiles
-from ppanggolin.figures import drawTilePlot, drawUCurve
-from ppanggolin.info import printInfo
+from ppanggolin.formats.writeBinaries import write_pangenome
+from ppanggolin.formats.writeFlat import write_flat_files
+from ppanggolin.figures.ucurve import draw_ucurve
+from ppanggolin.figures.tile_plot import draw_tile_plot
+from ppanggolin.info.info import print_info
 
 
 """ a global workflow that does everything in one go. """
 
 
-def launch(args):
+def launch(args: argparse.Namespace):
+    """
+    Command launcher
+
+    :param args: All arguments provide by user
+    """
     check_option_workflow(args)
     pangenome = Pangenome()
-    filename = mkFilename(args.basename, args.output, args.force)
+    filename = mk_file_name(args.basename, args.output, args.force)
     if args.anno:  # if the annotations are provided, we read from it
-        readAnnotations(pangenome, args.anno, cpu=args.cpu, disable_bar=args.disable_prog_bar)
-        writePangenome(pangenome, filename, args.force, disable_bar=args.disable_prog_bar)
+        read_annotations(pangenome, args.anno, cpu=args.cpu, disable_bar=args.disable_prog_bar)
+        write_pangenome(pangenome, filename, args.force, disable_bar=args.disable_prog_bar)
         if args.clusters is None and pangenome.status["geneSequences"] == "No" and args.fasta is None:
             raise Exception("The gff/gbff provided did not have any sequence informations, "
                             "you did not provide clusters and you did not provide fasta file. "
                             "Thus, we do not have the information we need to continue the analysis.")
-
         elif args.clusters is None and pangenome.status["geneSequences"] == "No" and args.fasta is not None:
-            getGeneSequencesFromFastas(pangenome, args.fasta)
+            get_gene_sequences_from_fastas(pangenome, args.fasta)
 
         if args.clusters is not None:
-            readClustering(pangenome, args.clusters, disable_bar=args.disable_prog_bar)
+            read_clustering(pangenome, args.clusters, disable_bar=args.disable_prog_bar)
 
         elif args.clusters is None:  # we should have the sequences here.
-            clustering(pangenome, tmpdir=args.tmpdir, cpu=args.cpu, defrag=not args.no_defrag,
-                       disable_bar=args.disable_prog_bar)
+            clustering(pangenome, tmpdir=args.tmpdir, cpu=args.cpu, defrag=not args.no_defrag, coverage=args.coverage,
+                       identity=args.identity, mode=args.mode, disable_bar=args.disable_prog_bar)
     elif args.fasta is not None:
         pangenome = Pangenome()
-        annotatePangenome(pangenome, args.fasta, args.tmpdir, args.cpu, contig_filter=args.contig_filter,
-                          disable_bar=args.disable_prog_bar)
-        writePangenome(pangenome, filename, args.force, disable_bar=args.disable_prog_bar)
-        clustering(pangenome, tmpdir=args.tmpdir, cpu=args.cpu, defrag=not args.no_defrag,
-                   disable_bar=args.disable_prog_bar)
+        annotate_pangenome(pangenome, args.fasta, args.tmpdir, args.cpu, contig_filter=args.contig_filter,
+                           disable_bar=args.disable_prog_bar)
+        write_pangenome(pangenome, filename, args.force, disable_bar=args.disable_prog_bar)
+        clustering(pangenome, tmpdir=args.tmpdir, cpu=args.cpu, defrag=not args.no_defrag, coverage=args.coverage,
+                   identity=args.identity, mode=args.mode, disable_bar=args.disable_prog_bar)
 
-    computeNeighborsGraph(pangenome, disable_bar=args.disable_prog_bar)
+    compute_neighbors_graph(pangenome, disable_bar=args.disable_prog_bar)
 
-    partition(pangenome, tmpdir=args.tmpdir, cpu=args.cpu, K=args.nb_of_partitions, disable_bar=args.disable_prog_bar)
-    writePangenome(pangenome, filename, args.force, disable_bar=args.disable_prog_bar)
+    partition(pangenome, tmpdir=args.tmpdir, kval=args.nb_of_partitions, cpu=args.cpu,
+              disable_bar=args.disable_prog_bar)
+    write_pangenome(pangenome, filename, args.force, disable_bar=args.disable_prog_bar)
 
     if args.rarefaction:
-        makeRarefactionCurve(pangenome, args.output, args.tmpdir, cpu=args.cpu, disable_bar=args.disable_prog_bar)
+        make_rarefaction_curve(pangenome, args.output, args.tmpdir, cpu=args.cpu, disable_bar=args.disable_prog_bar)
     if 1 < len(pangenome.organisms) < 5000:
-        drawTilePlot(pangenome, args.output, nocloud=False if len(pangenome.organisms) < 500 else True)
-    drawUCurve(pangenome, args.output)
+        draw_tile_plot(pangenome, args.output, nocloud=False if len(pangenome.organisms) < 500 else True)
+    draw_ucurve(pangenome, args.output)
 
-    writeFlatFiles(pangenome, args.output, args.cpu, csv=True, genePA=True, gexf=True, light_gexf=True, projection=True,
-                   json=True, stats=True, partitions=True)
+    write_flat_files(pangenome, args.output, args.cpu, csv=True, gene_pa=True, gexf=True, light_gexf=True,
+                     projection=True, stats=True, json=True, partitions=True)
 
-    printInfo(filename, content=True)
+    print_info(filename, content=True)
 
 
-def workflowSubparser(subparser):
-    parser = subparser.add_parser("workflow", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+def subparser(sub_parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
+    """
+    Subparser to launch PPanGGOLiN in Command line
+
+    :param sub_parser : sub_parser for align command
+
+    :return : parser arguments for align command
+    """
+    parser = sub_parser.add_parser("workflow", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     required = parser.add_argument_group(title="Input arguments", description="The possible input arguments :")
     required.add_argument('--fasta', required=False, type=str,
@@ -91,6 +105,13 @@ def workflowSubparser(subparser):
                                                                       time.localtime()) + "_PID" + str(os.getpid()),
                           help="Output directory")
     optional.add_argument("--basename", required=False, default="pangenome", help="basename for the output file")
+    optional.add_argument("--mode", required=False, default="1", choices=["0", "1", "2", "3"],
+                          help="the cluster mode of MMseqs2. 0: Setcover, 1: single linkage (or connected component),"
+                               " 2: CD-HIT-like, 3: CD-HIT-like (lowmem)")
+    optional.add_argument("--coverage", required=False, type=restricted_float, default=0.8,
+                          help="Minimal coverage of the alignment for two proteins to be in the same cluster")
+    optional.add_argument("--identity", required=False, type=restricted_float, default=0.8,
+                          help="Minimal identity percent for two proteins to be in the same cluster")
     optional.add_argument("--rarefaction", required=False, action="store_true",
                           help="Use to compute the rarefaction curves (WARNING: can be time consuming)")
     optional.add_argument("-K", "--nb_of_partitions", required=False, default=-1, type=int,

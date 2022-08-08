@@ -14,13 +14,23 @@ import plotly.graph_objs as go
 import plotly.offline as out_plotly
 import colorlover as cl
 # local libraries
-from ppanggolin.formats import checkPangenomeInfo
+from ppanggolin.formats import check_pangenome_info
+from ppanggolin.pangenome import Pangenome
 from ppanggolin.utils import jaccard_similarities
 
 
-def drawTilePlot(pangenome, output, nocloud=False, disable_bar=False):
-    checkPangenomeInfo(pangenome, needAnnotations=True, needFamilies=True, needGraph=True, disable_bar=disable_bar)
-    if pangenome.status["partitionned"] == "No":
+def draw_tile_plot(pangenome: Pangenome, output: str, nocloud: bool = False, disable_bar: bool = False):
+    """
+    Draw a tile plot from a partitioned pangenome
+
+    :param pangenome: Partitioned pangenome
+    :param output: Path to output directory
+    :param nocloud: Do not draw the cloud partition
+    :param disable_bar: Allow to disable progress bar
+    """
+
+    check_pangenome_info(pangenome, need_annotations=True, need_families=True, need_graph=True, disable_bar=disable_bar)
+    if pangenome.status["partitioned"] == "No":
         raise Exception("Cannot draw the tile plot as your pangenome has not been partitioned")
     if len(pangenome.organisms) > 500 and nocloud is False:
         logging.getLogger().warning("You asked to draw a tile plot for a lot of organisms (>500). "
@@ -32,14 +42,14 @@ def drawTilePlot(pangenome, output, nocloud=False, disable_bar=False):
     fam2index = {}
     index2fam = {}
     if nocloud:
-        families = {fam for fam in pangenome.geneFamilies if not fam.partition.startswith("C")}
+        families = {fam for fam in pangenome.gene_families if not fam.partition.startswith("C")}
     else:
-        families = set(pangenome.geneFamilies)
-    org_index = pangenome.getIndex()
+        families = set(pangenome.gene_families)
+    org_index = pangenome.get_org_index()
     index2org = {}
     for org, index in org_index.items():
         index2org[index] = org
-    COLORS = {"pangenome": "black", "exact_accessory": "#EB37ED", "exact_core": "#FF2828", "soft_core": "#c7c938",
+    colors = {"pan": "black", "exact_accessory": "#EB37ED", "exact_core": "#FF2828", "soft_core": "#c7c938",
               "soft_accessory": "#996633", "shell": "#00D860", "persistent": "#F7A507", "cloud": "#79DEFF",
               "undefined": "#828282"}
 
@@ -76,7 +86,7 @@ def drawTilePlot(pangenome, output, nocloud=False, disable_bar=False):
     ordered_nodes_c = sorted(partitions_dict["C"], key=lambda n: len(n.organisms), reverse=True)
     sep_p = len(ordered_nodes_p) - 0.5
     separators = [sep_p]
-    shell_NA = None
+    shell_na = None
     if len(shell_subs) == 1:
         ordered_nodes_s = sorted(partitions_dict[shell_subs.pop()], key=lambda n: len(n.organisms), reverse=True)
         ordered_nodes = ordered_nodes_p + ordered_nodes_s + ordered_nodes_c
@@ -86,7 +96,7 @@ def drawTilePlot(pangenome, output, nocloud=False, disable_bar=False):
         ordered_nodes = ordered_nodes_p
         for subpartition in sorted(shell_subs):
             if subpartition == "S_":
-                shell_NA = len(separators) - 1
+                shell_na = len(separators) - 1
             ordered_nodes_s = sorted(partitions_dict[subpartition], key=lambda n: len(n.organisms), reverse=True)
             ordered_nodes += ordered_nodes_s
             separators.append(separators[len(separators) - 1] + len(ordered_nodes_s))
@@ -97,9 +107,9 @@ def drawTilePlot(pangenome, output, nocloud=False, disable_bar=False):
     for node in ordered_nodes:
         fam_order.append('\u200c' + node.name)
         data = node.organisms
-        binary_data.append([len(node.getGenesPerOrg(org)) if org in data else numpy.nan for org in order_organisms])
-        text_data.append(
-            [("\n".join(map(str, node.getGenesPerOrg(org)))) if org in data else numpy.nan for org in order_organisms])
+        binary_data.append([len(node.get_genes_per_org(org)) if org in data else numpy.nan for org in order_organisms])
+        text_data.append([("\n".join(map(str, node.get_genes_per_org(org))))
+                          if org in data else numpy.nan for org in order_organisms])
 
     xaxis_values = ['\u200c' + org.name for org in order_organisms]
 
@@ -130,16 +140,16 @@ def drawTilePlot(pangenome, output, nocloud=False, disable_bar=False):
     sep_prec = 0
     for nb, sep in enumerate(separators):
         if nb == 0:
-            color = COLORS["persistent"]
+            color = colors["persistent"]
         elif nb == (len(separators) - 1):
-            color = COLORS["cloud"]
+            color = colors["cloud"]
         elif len(shell_subs) > 1:
-            if shell_NA is not None and nb == shell_NA:
-                color = COLORS["shell"]
+            if shell_na is not None and nb == shell_na:
+                color = colors["shell"]
             else:
                 color = shell_color.pop()
         else:
-            color = COLORS["shell"]
+            color = colors["shell"]
         shapes.append(dict(type='line', x0=-1, x1=-1, y0=sep_prec, y1=sep, line=dict(dict(width=10, color=color))))
         shapes.append(dict(type='line', x0=len(pangenome.organisms), x1=len(pangenome.organisms), y0=sep_prec, y1=sep,
                            line=dict(dict(width=10, color=color))))
