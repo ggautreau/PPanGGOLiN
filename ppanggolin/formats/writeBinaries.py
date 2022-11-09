@@ -98,6 +98,21 @@ def get_max_len_annotations(pangenome: Pangenome) -> Tuple[int, int, int, int, i
 
     return max_org_len, max_contig_len, max_gene_id_len, max_type_len, max_name_len, max_product_len, max_local_id
 
+class geneTableElement:
+    def __init__(self, start, stop, strand, genetype, position, name, product, is_fragment, genetic_code):
+        """stores potentially non unique descriptive info of a gene"""
+        self.start = start
+        self.stop = stop
+        self.strand = strand
+        self.type=genetype
+        self.position=position
+        self.name=name
+        self.product=product
+        self.is_fragment=is_fragment
+        self.genetic_code = genetic_code
+
+    def get_element(self):
+        return (self.start, self.stop, self.strand, self.type, self.position, self.name, self.product, self.is_fragment, self.genetic_code)
 
 def write_annotations(pangenome: Pangenome, h5f: tables.File, disable_bar: bool = False):
     """
@@ -110,6 +125,7 @@ def write_annotations(pangenome: Pangenome, h5f: tables.File, disable_bar: bool 
     annotation = h5f.create_group("/", "annotations", "Annotations of the pangenome organisms")
     gene_table = h5f.create_table(annotation, "genes", gene_desc(*get_max_len_annotations(pangenome)),
                                   expectedrows=len(pangenome.genes))
+    geneTabs = set()
 
     gene_row = gene_table.row
     for org in tqdm(pangenome.organisms, total=pangenome.number_of_organisms(), unit="genome", disable=disable_bar):
@@ -130,6 +146,7 @@ def write_annotations(pangenome: Pangenome, h5f: tables.File, disable_bar: bool 
                 gene_row["gene/genetic_code"] = gene.genetic_code
                 gene_row["gene/local"] = gene.local_identifier
                 gene_row.append()
+                geneTabs.add((gene.start, gene.stop, gene.strand, gene.type, gene.position, gene.name, gene.product, gene.is_fragment, gene.genetic_code))
             for rna in contig.RNAs:
                 gene_row["organism"] = org.name
                 gene_row["contig/name"] = contig.name
@@ -144,6 +161,11 @@ def write_annotations(pangenome: Pangenome, h5f: tables.File, disable_bar: bool 
                 gene_row["gene/is_fragment"] = rna.is_fragment
                 gene_row.append()
     gene_table.flush()
+
+    logging.getLogger().info(f"would get {len(geneTabs)} elements instead of {len(pangenome.genes)}")
+
+    #for val in sorted(geneTabs, key=lambda x:x[0]):
+    #    print(val)
 
 
 def get_gene_sequences_len(pangenome: Pangenome) -> Tuple[int, int]:
