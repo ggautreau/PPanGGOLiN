@@ -27,7 +27,8 @@ def write_gene_sequences_from_annotations(pangenome, file_obj, list_cds=None, ad
     counter = 0
     if list_cds is None:
         list_cds = pangenome.genes
-    logging.getLogger().info("Writing all of the CDS sequences...")
+    if not disable_bar:
+        logging.getLogger().info("Writing all of the CDS sequences...")
     for gene in tqdm(list_cds, unit="gene", disable=disable_bar):
         if gene.type == "CDS":
             counter += 1

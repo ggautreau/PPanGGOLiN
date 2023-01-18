@@ -14,3 +14,5 @@ colorlover>=0.3
 mafft>=7.490
 numpy>=1.19.5
 bokeh>=2.3.3
+vg>=1.44.0
+seqwish>=0.7.8

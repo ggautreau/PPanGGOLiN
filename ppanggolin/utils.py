@@ -251,3 +251,59 @@ def check_option_workflow(args):
 
     if not any([args.fasta, args.anno]):
         raise Exception("At least one of --fasta or --anno must be given")
+
+def get_file_size(f):
+    old_file_position = f.tell()
+    f.seek(0, os.SEEK_END)
+    size = f.tell()
+    f.seek(old_file_position, os.SEEK_SET)
+    return size
+
+reverse_sign = lambda x: '-' if (x=='+') else '+'
+
+def canonical(node_list: str):
+    """
+    Returns the canonical representation of a node list. 
+    We define the canonical as the min between a list eg: 684619+,684620+,684618+ and its reverse eg: 684618-,684620-,684619-
+    wrt to the first unsigned value (here 684619 or 684618). In this case we return 684618-,684620-,684619-
+    """
+    splitted_node_list = node_list.split(',')
+    # if only one node, sign is always "+"
+    if len(splitted_node_list) == 1:
+        return splitted_node_list[0][:-1]+"+"
+    else:
+        if int(splitted_node_list[0][:-1]) < int(splitted_node_list[-1][:-1]): 
+            return node_list
+        # else
+        rev_list = ','.join([val[:-1]+reverse_sign(val[-1]) for val in reversed(splitted_node_list)])
+        return rev_list
+        
+def canonical_tiny(node_list: list):
+    """
+    Returns the canonical representation of a node list.
+    For smaller lists (reads mapping paths).
+    Check the sum of the difference direction of each intervalles between successive nodes
+    """
+    if len(node_list) == 1 or sum([t - s > 0 for s, t in zip(node_list, node_list[1:])])/(len(node_list)-1) > 0.5:
+        return node_list
+    return node_list[::-1]
+
+def filter_fastq(input_path, output_path, headers_to_keep):
+    with open(output_path, 'w') as output_fastq:
+        with read_compressed_or_not(input_path) as input_fastq:
+            next_lines_to_print = 0
+            for line in input_fastq:
+                if next_lines_to_print < 0:
+                    next_lines_to_print += 1
+                    continue
+                elif next_lines_to_print > 0:
+                    output_fastq.write(line)
+                    next_lines_to_print -= 1
+                elif line.startswith("@"):
+                    if line.split(" ")[0][1:].strip() in headers_to_keep:
+                        output_fastq.write(line)
+                        next_lines_to_print = 3
+                    else:
+                        next_lines_to_print = -3
+                else:
+                    print("problem " + line)

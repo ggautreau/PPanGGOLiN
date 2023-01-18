@@ -2,6 +2,7 @@
 # coding: utf8
 
 # default libraries
+import logging
 from collections.abc import Iterable
 
 # local libraries
@@ -9,7 +10,25 @@ from ppanggolin.genome import Organism
 from ppanggolin.region import Region
 from ppanggolin.geneFamily import GeneFamily
 from ppanggolin.edge import Edge
+from ppanggolin.utils import canonical, get_file_size
 
+class Node:
+    """A class representing a VG node"""
+    def __init__(self, sequence: str):
+        self.len_sequence = len(sequence)   # we need to remind the length of the sequence of each node for statistical computations
+        self.traversed_path = []            # ids (int) of the traversed paths. This corresponds to indexes in the Pangenome.paths list
+        self.sequence = sequence
+class Path:
+    """A class representing a VG path composed of several nodes"""
+    def __init__(self, ID):
+        self.ID = ID
+        self.node_ids   = []                # a set of node ids (ints)
+        self.family = None              # id (string) of the cluster this path belongs to
+        self.genes = set()                # ids of the genes that generated this path with their counts.
+        self.organisms = {}                # dict of the organism that shared this path with their counts if it is present several times
+
+    def get_sequence_length(self):
+        return sum([self.nodes[node_id].len_sequence for node_id in self.node_ids])
 
 class Pangenome:
     """
@@ -34,6 +53,12 @@ class Pangenome:
         self._regionGetter = {}
         self.spots = set()
         self.modules = set()
+        ###
+        self.nodes = {}                     # key: id (unsigned int), value: Node 
+        self.paths = []                     # a list of ordered paths (id of a path is its ranks in this list)
+        self.paths_name_to_ids = {}         # no choice: each path has a string name, eg gi|1388876906|ref|NZ_CP028116.1|_1000. Two identical paths (eg 684619+,684620+,684618+) may have distinct occurrences and thus names (as comming from distinct genes). Hence one storesfor each path name its unique path id.
+        self.paths_content_to_ids = {}      # no choice: each path has a content, eg 684619+,684620+,684618+. This is the key to know its UNIQUE id (int) that is also the rank in the self.paths list
+        self.species_names = set()          # store all species ids NZ_CP007592.1, NC_013654.1, ...
 
         self.status = {
             'genomesAnnotated': "No",
@@ -45,7 +70,8 @@ class Pangenome:
             'partitioned': "No",
             'predictedRGP': "No",
             'spots': "No",
-            'modules': 'No'
+            'modules': 'No',
+            'variation_graphs': 'No'
         }
         self.parameters = {}
 
@@ -438,3 +464,98 @@ class Pangenome:
             module.mk_bitarray(index=self._fam_index, partition=part)
         # case where there is an index but the bitarrays have not been computed???
         return self._fam_index
+
+    def fill_from_GFA_file(self, gfa_file_name: str):
+        """
+        PARSE GFA FILE
+        From the gfa file, create a dictionary of the VG nodes and paths in the graph.
+        S lines contain node ID and its sequence
+        P lines contain path ID, list of node ID with orientation and cover of the nodes
+        L lines contain links between nodes (we dont care)
+        """
+        logging.getLogger().debug("Load the GFA file")
+        path_id = 0
+        with open(gfa_file_name, 'r') as gfa_file:
+            size_file = get_file_size(gfa_file)
+            while True:
+                line = gfa_file.readline()
+
+                # end of the file
+                if not line:
+                    break
+
+                current_seek = gfa_file.tell()
+      
+                line = line.strip().split('\t')
+                # if line S, create node
+                if line[0] == 'S':
+                    # S       1       ACCACGATTACGCTGGCGCTTA
+                    self.nodes[int(line[1])] = Node(line[2]) 
+                # if line P, create paths and add paths infos in nodes
+                elif line[0] == 'P':
+                    # P       gi|1388876906|ref|NZ_CP028116.1|_1000   684619+,684620+,684618+ 187M,187M,1M 
+                    # path_id = line[1]
+                    str_node_list = canonical(line[2])
+                    gene = self.get_gene(line[1])
+                    # If this path was already seen, we simply add this strain_id to the path.strain_ids
+                    if str_node_list in self.paths_content_to_ids:
+                        already_seen_path_id = self.paths_content_to_ids[str_node_list]
+                        if gene not in self.paths[already_seen_path_id].genes:
+                            self.paths[already_seen_path_id].organisms[gene.organism]=0
+                        self.paths[already_seen_path_id].organisms[gene.organism]+=1
+                        self.paths[already_seen_path_id].genes.add(gene)
+                        self.paths_name_to_ids[line[1]] = already_seen_path_id
+                        continue # nothing more to do, no incrementation of path_id, as no new path was created
+
+                    path = Path(path_id)
+                    path.family=gene.family
+                    if gene.organism not in path.organisms:
+                        path.organisms[gene.organism]=0
+                    path.organisms[gene.organism]+=1
+                    node_list = str_node_list.split(',')
+                    # seq = ""
+                    for node_info in node_list:
+                        node_id = int(node_info[:-1])
+                        node = self.nodes[node_id]
+                        # add the current path id to the traversed paths of this node
+                        # we could have used a set for traversed_path, but this requires more memory
+                        if path_id not in node.traversed_path:
+                            node.traversed_path.append(path_id)
+
+                        path.node_ids.append(node_id)
+                        # path.hamming_distance.append(0)
+                    # assert line[1] not in self.paths_name_to_ids # todo: remove when tested that this path ids has never been seen before
+
+                    self.paths.append(path)                                 # store this new path
+                    self.paths_name_to_ids[line[1]] = path_id
+                    self.paths_content_to_ids[str_node_list] = path_id
+                    path_id+=1
+        self.status["variation_graphs"]="Loaded"
+
+    def get_matching_path(self, path_as_node_list):
+        """
+        INPUT = a node list (from alignement)
+        to speed the search we get the starting node of the alignment and search only on paths crossing this start node
+        to speed the seach, we use the node position in the selected path and extend the list of nodes by the same length of the alignment
+        there is a match if the seed+extend list is identical to the node list of the alignment
+        OUPUT = list of paths where the node list match
+        """
+        if self.status["variation_graphs"] != "No":
+            result = []  # (path_id, corresponding starting node_id, number of nodes mapped)
+            start_node = path_as_node_list[0]
+            paths_sel = self.nodes[start_node].traversed_path
+
+            # for each path crossing the start node
+            for path_id in paths_sel:
+                colored_path = self.paths[path_id]
+                all_pos_first = [i for i, v in enumerate(colored_path.node_ids) if
+                                 v == start_node]  # start_node from alignment may have several occurrences in the colored path
+
+                for pos_first in all_pos_first:
+                    if colored_path.node_ids[pos_first:pos_first + len(path_as_node_list)] == path_as_node_list:
+                        result.append((path_id, pos_first))
+
+            return result
+
+    def get_sequence_length(self, path):
+        return sum([self.nodes[node_id].len_sequence for node_id in path.node_ids])

@@ -28,6 +28,7 @@ import ppanggolin.RGP.genomicIsland
 import ppanggolin.RGP.spot
 import ppanggolin.mod
 import ppanggolin.context
+import ppanggolin.comparison
 import ppanggolin.workflow.workflow
 import ppanggolin.workflow.panRGP
 import ppanggolin.workflow.panModule
@@ -73,6 +74,9 @@ def cmd_line():
     desc += "  Genomic context:\n"
     desc += "    context      Local genomic context analysis\n"
     desc += "  \n"
+    desc += "  Contrasting families according to a comparison:\n"
+    desc += "    compare      Compare organisms or samples conditions to identify contrasting families\n"
+    desc += "  \n"
 
     parser = argparse.ArgumentParser(
         description="Depicting microbial species diversity via a Partitioned PanGenome Graph Of Linked Neighbors",
@@ -100,7 +104,8 @@ def cmd_line():
             ppanggolin.RGP.genomicIsland.subparser(subparsers),
             ppanggolin.RGP.spot.subparser(subparsers),
             ppanggolin.mod.subparser(subparsers),
-            ppanggolin.context.subparser(subparsers)]  # subparsers
+            ppanggolin.context.subparser(subparsers),
+            ppanggolin.comparison.compareConditions.subparser(subparsers)]  # subparsers
     ppanggolin.info.subparser(subparsers)  # not adding to sub because the 'common' options are not needed for this
     for sub in subs:  # add options common to all subcommands
         common = sub._action_groups.pop(1)  # get the 'optional arguments' action group.
@@ -179,11 +184,12 @@ def main():
         ppanggolin.mod.launch(args)
     elif args.subcommand == "panmodule":
         ppanggolin.workflow.panModule.launch(args)
+    elif args.subcommand == "compare":
+        ppanggolin.comparison.compareConditions.launch(args)
     elif args.subcommand == "all":
         ppanggolin.workflow.all.launch(args)
     elif args.subcommand == "context":
         ppanggolin.context.launch(args)
-
 
 if __name__ == "__main__":
     main()
