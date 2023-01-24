@@ -576,7 +576,7 @@ def parse_vgmpmap(json_file_name: str, pangenome_sample_mapping: PangenomeSample
                         # no shared counts for families as it would add noise for the incompatibility check afterwards
                         for key in mapped_paths:
                             mapped_paths[key]["families"] = [
-                                pangenome_sample_mapping.paths[pangenome_sample_mapping.nodes[p.mapped_nodes_id[0]].traversed_path[0]].family_id for
+                                pangenome_sample_mapping.paths[pangenome_sample_mapping.nodes[p.mapped_nodes_id[0]].traversed_path[0]].family.name for
                                 p in mapped_paths[key]["paths"]]
                         intersect_families = list(
                             set(mapped_paths["r1"]["families"]) & set(mapped_paths["r2"]["families"]))
@@ -589,18 +589,18 @@ def parse_vgmpmap(json_file_name: str, pangenome_sample_mapping: PangenomeSample
                                 if len(mapped_paths[key][
                                            "families"]) == 1:  # if >1, do nothing + if duplicates, do nothing / if ==1, means there is only one path => OK
                                     traversed_family = mapped_paths[key]["families"][0]
-                                    pangenome_sample_mapping.families[traversed_family].reads_name.append(
+                                    pangenome_sample_mapping.get_gene_family(traversed_family).reads_name.append(
                                         mapped_paths[key]["name"])  # to delete after test
-                                    pangenome_sample_mapping.families[traversed_family].unassigned_paths.append(
+                                    pangenome_sample_mapping.get_gene_family(traversed_family).unassigned_paths.append(
                                         mapped_paths[key]["paths"][0].mapped_nodes_id)
-                                    pangenome_sample_mapping.families[traversed_family].unassigned_count += 1
-                                    pangenome_sample_mapping.families[traversed_family].unassigned_count_norm += 1 / \
+                                    pangenome_sample_mapping.get_gene_family(traversed_family).unassigned_count += 1
+                                    pangenome_sample_mapping.get_gene_family(traversed_family).unassigned_count_norm += 1 / \
                                                                                                    mapped_paths[key][
                                                                                                        "paths"][0].len
                                     for i, n in enumerate(mapped_paths[key]["paths"][0].mapped_nodes_id):
-                                        if n not in pangenome_sample_mapping.families[traversed_family].unassigned_abund:
-                                            pangenome_sample_mapping.families[traversed_family].unassigned_abund[n] = 0
-                                        pangenome_sample_mapping.families[traversed_family].unassigned_abund[n] += \
+                                        if n not in pangenome_sample_mapping.get_gene_family(traversed_family).unassigned_abundances:
+                                            pangenome_sample_mapping.get_gene_family(traversed_family).unassigned_abundances[n] = 0
+                                        pangenome_sample_mapping.get_gene_family(traversed_family).unassigned_abundances[n] += \
                                         mapped_paths[key]["paths"][0].mapped_nodes_cov[i]
 
                     # 2. one of the read has no cp = go to single-end style
