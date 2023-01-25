@@ -114,7 +114,7 @@ class Comparison:
             self.sample_counts_gene_families[family][sample] += count
         else:
             self.sample_counts_gene_families[family][sample] = count
-        sample.imported_count=True
+        sample.imported_counts=True
         self.performed = False
 
     def import_count_matrix(self, count_matrix_file, sep = "\t"):
@@ -137,6 +137,7 @@ class Comparison:
 
     def get_all_orgs(self, condition = "both"):
         ret = set()
+        condition = str(condition)
         if condition == "both" or condition[-1] == "1":
             for samples_or_orgs in self.condition1_samples_or_orgs.values():
                 if samples_or_orgs.__class__ == Organism:
@@ -149,6 +150,7 @@ class Comparison:
 
     def get_all_samples(self, condition = "both"):
         ret = set()
+        condition = str(condition)
         if condition == "both" or condition[-1] == "1":
             for samples_or_orgs in self.condition1_samples_or_orgs.values():
                 if samples_or_orgs.__class__ == Sample:
@@ -161,6 +163,7 @@ class Comparison:
 
     def get_all_covered_samples(self, reversed=False, condition = "both"):
         ret = set()
+        condition = str(condition)
         for s in self.get_all_samples(condition = condition):
             if xor(s.covered, reversed):
                 ret.add(s)
@@ -168,6 +171,7 @@ class Comparison:
 
     def get_all_samples_or_orgs(self, condition = "both"):
         ret = set()
+        condition = str(condition)
         if condition == "both" or condition[-1] == "1":
             for samples_or_orgs in self.condition1_samples_or_orgs.values():
                 ret.add(samples_or_orgs)
@@ -186,7 +190,37 @@ class Comparison:
                 ret.add(s)
         return(ret)
 
-    def perform_comparisons(self, functional_modules=None, min_cov_persistent=0.85, th_ratio_persistent_mean_coverage=0.05):
+    def write_conditions(self, dir = None):
+        with open(dir + "/conditions_" + self.name + ".tsv", "w") as conditions:
+            samples = list(self.get_all_covered_samples(condition=1) | self.get_all_covered_samples(condition=2))
+            orgs = list(self.get_all_orgs(condition=1) | self.get_all_orgs(condition=2))
+            conditions.write("sample_or_orgs\tcondition\n")
+            for sample_or_org in samples+orgs:
+                if sample_or_org.name in self.condition1_samples_or_orgs and sample_or_org.name not in self.condition2_samples_or_orgs:
+                    conditions.write(sample_or_org.name+"\t0\n")
+                elif sample_or_org.name in self.condition2_samples_or_orgs and sample_or_org.name not in self.condition1_samples_or_orgs:
+                    conditions.write(sample_or_org.name + "\t1\n")
+
+    def write_used_dataset_binary_matrix(self, condition = "both", dir = None):
+        with open(dir + "/dataset_" + condition + "_" + self.name + "_binary.tsv", "w") as dataset:
+            samples = list(self.get_all_covered_samples(condition=condition))
+            orgs = list(self.get_all_orgs(condition=condition))
+            dataset.write("\t".join(["gene_families"] + [str(s_or_o.name) for s_or_o in samples + orgs]) + "\n")
+            for gf in self.pangenome.gene_families:
+                dataset.write("\t".join(
+                    [str(gf.name)] + ["1" if self.sample_counts_gene_families[gf][s] > s.th else "0" for s in
+                                      samples] + ["1" if org in gf.organisms else "0" for org in orgs]) + "\n")
+
+    def write_used_dataset_count(self, condition = "both", dir = None):
+        with open(dir + "/dataset_" + condition + "_" + self.name + "_counts.tsv", "w") as dataset:
+            samples = list(self.get_all_samples(condition=condition).intersection(self.get_all_covered_samples()))
+            dataset.write("\t".join(["#th_samples"] + [str(s.th) for s in samples]) + "\n")
+            dataset.write("\t".join(["gene_families"] + [str(s.name) for s in samples]) + "\n")
+            for gf in self.pangenome.gene_families:
+                dataset.write("\t".join(
+                    [str(gf.name)] + [str(self.sample_counts_gene_families[gf][s]) for s in samples]) + "\n")
+
+    def perform_comparisons(self, functional_modules = None, min_cov_persistent=0.85, th_ratio_persistent_mean_coverage=0.05, dir = None):
         """
         TODO doc to update
         Perform comparations based on the occurences of genes in a pangenome between two list of genomes corresponding to 2 conditions.
@@ -240,19 +274,48 @@ class Comparison:
 
             uncorrected_pvalues.append(self.results[f].pvalue)
 
+        self.write_used_dataset_binary_matrix("both", dir)
+        self.write_conditions(dir)
+        #cmd = "pyseer --no-distances --phenotypes "+dir+"/conditions_" + self.name + ".tsv --pres "+dir+"dataset_both_" + self.name + "_binary.tsv > "+dir+"/pyseer.assoc"
+        #logging.getLogger().info(cmd)
+        #subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        if dir is not None:
+            self.write_used_dataset_binary_matrix("1", dir)
+            self.write_used_dataset_binary_matrix("2", dir)
+            self.write_used_dataset_count("1", dir)
+            self.write_used_dataset_count("2", dir)
+            with open(dir + "/results_" + self.name + ".tsv", "w") as tsvfile:
+                tsvfile.write("Id\tGene_family_name\tpartition\tpvalue\toddsratio\tV\tcorrected_pvalue\tmodule_id\tmodule_combined_pvalue\tmodule_mean_oddsratio\tmodule_mean_cramer_V\tmodule_combined_corrected_pvalue\n")
+                for fam_result in sorted(self.results.values(), key=lambda x: x.pvalue):
+                    index = str(fam_result.family.ID)
+                    fam_name = fam_result.family.name
+                    partition = fam_result.family.named_partition
+                    pvalue_str = str(fam_result.pvalue)
+                    oddsratio_str = str(fam_result.oddsratio)
+                    cramer_V_str = str(fam_result.cramer_V)
+                    corrected_pvalue_str = str(fam_result.corrected_pvalue)
+                    try:
+                        module_id = str(fam_result.module_results.module)
+                        module_combined_pvalue_str = str(fam_result.module_results.combined_pvalue)
+                        module_mean_oddsratio_str = str(fam_result.module_results.mean_oddsratio)
+                        module_mean_cramer_V_str = str(fam_result.module_results.mean_cramer_V)
+                        module_combined_corrected_pvalue_str = str(fam_result.module_results.combined_corrected_pvalue)
+                        tsvfile.write(
+                            index + "\t" + fam_name + "\t" + partition + "\t" + pvalue_str + "\t" + oddsratio_str + "\t" + cramer_V_str + "\t" + corrected_pvalue_str + "\t" + module_id + "\t" + module_combined_pvalue_str + "\t" + module_mean_oddsratio_str + "\t" + module_mean_cramer_V_str + "\t" + module_combined_corrected_pvalue_str + "\n")
+                    except:
+                        tsvfile.write(
+                            index + "\t" + fam_name + "\t" + partition + "\t" + pvalue_str + "\t" + oddsratio_str + "\t" + cramer_V_str + "\t" + corrected_pvalue_str + "\t\t\t\t\t\n")
+
         all_corrected_pvals = multipletests(uncorrected_pvalues, alpha=0.05, method='fdr_bh', is_sorted=False, returnsorted=False)[1]
         for index, f in enumerate(self.pangenome.gene_families):
             self.results[f].corrected_pvalue = all_corrected_pvals[index]
-        module_results = None
         if functional_modules is not None:
-            module_results = {}
             for module, fams in functional_modules.items():
-                module_results[module] = ModuleComparisonResult(module, [self.results[f] for f in fams])
+                mr = ModuleComparisonResult(module, [self.results[f] for f in fams])
                 for f in fams:
-                    self.results[f].module_results = module_results[module]
+                    self.results[f].module_results = mr
 
         self.performed = True
-        return(module_results)
 
 def extract_modules_file(functional_modulesf_file):
     """ Extract the module associated to each families
@@ -320,11 +383,10 @@ def launch(args):
 
     comparison = extract_conditions_and_sample_read_files(pangenome, args.conditions_file)
     if args.import_count_matrix is not None:
-        comparison.import_count_matrix(count_matrix_file=args.import_count_matrix, sep=args.separator)
-
+        comparison.import_count_matrix(count_matrix_file=args.import_count_matrix)
     if len(comparison.get_all_samples_having_counts(reversed=True)) > 0:
         map_on_graphs(pangenome, comparison, output_dir = args.output, cpu= args.cpu)
-        with open(args.output+"/count_matrix_"+comparison.name+"_.tsv","w") as count_matrix:
+        with open(args.output+"/count_matrix_"+comparison.name+".tsv","w") as count_matrix:
             samples = list([s for s in comparison.get_all_samples()])
             count_matrix.write("\t".join(["gene_families"]+[s.name for s in samples])+"\n")
             for gf in pangenome.gene_families:
@@ -336,47 +398,9 @@ def launch(args):
     if args.import_functional_modules is not None:
         functional_modules = extract_modules_file(args.import_functional_modules)
     logging.getLogger().debug("start of perform_compararison step")
-    module_results = comparison.perform_comparisons(functional_modules = functional_modules)
+    comparison.perform_comparisons(functional_modules = functional_modules, dir = args.output)
     logging.getLogger().debug("end of performCompararison step")
 
-    with open(args.output+"/results_"+comparison.name+".tsv", "w") as tsvfile:
-        tsvfile.write("Id\tGene_family_name\tpartition\tpvalue\toddsratio\tV\tcorrected_pvalue\tmodule_id\tmodule_combined_pvalue\tmodule_mean_oddsratio\tmodule_mean_cramer_V\tmodule_combined_corrected_pvalue\n")
-        for fam_results in sorted(comparison.results.values(), key = lambda x : x.pvalue):
-            index = str(fam_results.family.ID)
-            fam_name = fam_results.family.name
-            partition = fam_results.family.named_partition
-            pvalue_str = str(fam_results.pvalue)
-            oddsratio_str = str(fam_results.oddsratio)
-            cramer_V_str = str(fam_results.cramer_V)
-            corrected_pvalue_str = str(fam_results.corrected_pvalue)
-            try:
-                module_id = str(fam_results.module_results.module)
-                module_combined_pvalue_str = str(fam_results.module_results.combined_pvalue)
-                module_mean_oddsratio_str = str(fam_results.module_results.mean_oddsratio)
-                module_mean_cramer_V_str = str(fam_results.module_results.mean_cramer_V)
-                module_combined_corrected_pvalue_str = str(fam_results.module_results.combined_corrected_pvalue)
-                tsvfile.write(index+"\t"+fam_name+"\t"+partition+"\t"+pvalue_str+"\t"+oddsratio_str+"\t"+cramer_V_str+"\t"+corrected_pvalue_str+"\t"+module_id+"\t"+module_combined_pvalue_str+"\t"+module_mean_oddsratio_str+"\t"+module_mean_cramer_V_str+"\t"+module_combined_corrected_pvalue_str+"\n")
-            except:
-                tsvfile.write(index+"\t"+fam_name+"\t"+partition+"\t"+pvalue_str+"\t"+oddsratio_str+"\t"+cramer_V_str+"\t"+corrected_pvalue_str+"\t\t\t\t\t\n")
-    def write_used_dataset_binary_matrix(condition):
-        with open(args.output + "/dataset"+condition+"_" + comparison.name + "_binary.tsv", "w") as dataset:
-            samples = list(comparison.get_all_covered_samples(condition="1"))
-            orgs = list(comparison.get_all_orgs(condition=condition))
-            dataset.write("\t".join(["gene_families"] + [str(s_or_o.name) for s_or_o in samples + orgs]) + "\n")
-            for gf in pangenome.gene_families:
-                dataset.write("\t".join([str(gf.name)] + ["1" if comparison.sample_counts_gene_families[gf][s] > s.th else "0" for s in samples] + ["1" if org in gf.organisms else "0" for org in orgs]) + "\n")
-    def write_used_dataset_count(condition):
-        with open(args.output + "/dataset"+condition+"_" + comparison.name + "_counts.tsv", "w") as dataset:
-            samples = list(comparison.get_all_samples(condition=condition).intersection(comparison.get_all_covered_samples()))
-            dataset.write("\t".join(["#th_samples"] + [str(s.th) for s in samples]) + "\n")
-            dataset.write("\t".join(["gene_families"] + [str(s.name) for s in samples]) + "\n")
-            for gf in pangenome.gene_families:
-                dataset.write("\t".join([str(gf.name)] + [str(comparison.sample_counts_gene_families[gf][s]) for s in samples]) + "\n")
-
-    write_used_dataset_binary_matrix("1")
-    write_used_dataset_binary_matrix("2")
-    write_used_dataset_count("1")
-    write_used_dataset_count("2")
 
 def subparser(sub_parser):
     """
