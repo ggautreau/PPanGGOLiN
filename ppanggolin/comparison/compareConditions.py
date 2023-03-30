@@ -21,7 +21,7 @@ from scipy.stats.contingency import association
 from statsmodels.stats.multitest import multipletests
 
 #local libraries
-from ppanggolin.utils import mk_outdir, read_compressed_or_not, write_compressed_or_not
+from ppanggolin.utils import mk_outdir, restricted_float# read_compressed_or_not, write_compressed_or_not
 from ppanggolin.pangenome import Pangenome
 from ppanggolin.genome import Organism
 from ppanggolin.geneFamily import GeneFamily
@@ -241,6 +241,8 @@ class Comparison:
                         s.sample_family_persistent_coverage.append(abundance)
         for s in self.get_all_samples():
             if s.sample_family_persistent_covered > nb_persistent * min_cov_persistent:
+                import pdb;
+                pdb.set_trace()
                 s.covered = True
                 s.th = sum(s.sample_family_persistent_coverage) / s.sample_family_persistent_covered * th_ratio_persistent_mean_coverage
 
@@ -398,7 +400,10 @@ def launch(args):
     if args.import_functional_modules is not None:
         functional_modules = extract_modules_file(args.import_functional_modules)
     logging.getLogger().debug("start of perform_compararison step")
-    comparison.perform_comparisons(functional_modules = functional_modules, dir = args.output)
+    comparison.perform_comparisons(functional_modules = functional_modules,
+                                   min_cov_persistent = args.min_cov_persistent,
+                                   th_ratio_persistent_mean_coverage = args.th_ratio_persistent_mean_coverage,
+                                   dir = args.output)
     logging.getLogger().debug("end of performCompararison step")
 
 
@@ -437,6 +442,8 @@ def parser_compare(parser):
     families2 4.1     2.1     0.8
     families3 2.8     0       0.4''')
     optional.add_argument('--import_functional_modules', default=None, required = False, type = str, help = "Allow to import the list of module associated to each families. This correspond to the \"functional_modules.tsv\" file generate by the sub command \"module\"")
+    optional.add_argument('--min_cov_persistent',required=False, type=restricted_float, default=0.85, help = "specify the ratio of persistent genome to be covered to include a sample in the comparison")
+    optional.add_argument('--th_ratio_persistent_mean_coverage', required=False, type=restricted_float, default=0.05, help = "The percentile of the persistent genome distribution which coverage above means presence and below means absence")
 
     return parser
 
