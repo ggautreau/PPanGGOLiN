@@ -13,12 +13,14 @@ import os
 from multiprocessing import Pool
 import textwrap
 from operator import xor
+from math import inf
 
 # installed libraries
 import numpy as np
 from scipy.stats import ttest_rel, ttest_ind, wilcoxon, ranksums, iqr, fisher_exact, chi2_contingency, hmean
 from scipy.stats.contingency import association
 from statsmodels.stats.multitest import multipletests
+from statsmodels.stats.contingency_tables import StratifiedTable
 
 #local libraries
 from ppanggolin.utils import mk_outdir, restricted_float# read_compressed_or_not, write_compressed_or_not
@@ -64,18 +66,21 @@ class ModuleComparisonResult:
 
     @property
     def combined_pvalue(self):
-        return(hmean([fr.pvalue for fr in self.family_results.values()])[1])
+        return(hmean([fr.pvalue for fr in self.family_results]))
 
     @property
     def combined_corrected_pvalue(self):
-        return(hmean([fr.corrected_pvalue for fr in self.family_results.values()])[1])
+        return(hmean([fr.corrected_pvalue for fr in self.family_results]))
 
     @property
     def mean_cramer_V(self):
-        return(np.mean([fr.cramer_V for fr in self.family_results.values()]))
+        return(np.mean([fr.cramer_V for fr in self.family_results]))
     @property
     def mean_oddsratio(self):
-        return (np.mean([fr.oddsratio for fr in self.family_results.values()]))
+        return (np.mean([fr.oddsratio for fr in self.family_results]))
+    @property
+    def pooled_oddsratio(self):
+        return(StratifiedTable([fr.contingency_table for fr in self.family_results]).oddsratio_pooled)
 
 class Comparison:
     def __init__(self, pangenome, condition1_name, condition2_name, name = None):
@@ -241,8 +246,6 @@ class Comparison:
                         s.sample_family_persistent_coverage.append(abundance)
         for s in self.get_all_samples():
             if s.sample_family_persistent_covered > nb_persistent * min_cov_persistent:
-                import pdb;
-                pdb.set_trace()
                 s.covered = True
                 s.th = sum(s.sample_family_persistent_coverage) / s.sample_family_persistent_covered * th_ratio_persistent_mean_coverage
 
@@ -286,36 +289,35 @@ class Comparison:
             self.write_used_dataset_binary_matrix("2", dir)
             self.write_used_dataset_count("1", dir)
             self.write_used_dataset_count("2", dir)
-            with open(dir + "/results_" + self.name + ".tsv", "w") as tsvfile:
-                tsvfile.write("Id\tGene_family_name\tpartition\tpvalue\toddsratio\tV\tcorrected_pvalue\tmodule_id\tmodule_combined_pvalue\tmodule_mean_oddsratio\tmodule_mean_cramer_V\tmodule_combined_corrected_pvalue\n")
-                for fam_result in sorted(self.results.values(), key=lambda x: x.pvalue):
-                    index = str(fam_result.family.ID)
-                    fam_name = fam_result.family.name
-                    partition = fam_result.family.named_partition
-                    pvalue_str = str(fam_result.pvalue)
-                    oddsratio_str = str(fam_result.oddsratio)
-                    cramer_V_str = str(fam_result.cramer_V)
-                    corrected_pvalue_str = str(fam_result.corrected_pvalue)
-                    try:
-                        module_id = str(fam_result.module_results.module)
-                        module_combined_pvalue_str = str(fam_result.module_results.combined_pvalue)
-                        module_mean_oddsratio_str = str(fam_result.module_results.mean_oddsratio)
-                        module_mean_cramer_V_str = str(fam_result.module_results.mean_cramer_V)
-                        module_combined_corrected_pvalue_str = str(fam_result.module_results.combined_corrected_pvalue)
-                        tsvfile.write(
-                            index + "\t" + fam_name + "\t" + partition + "\t" + pvalue_str + "\t" + oddsratio_str + "\t" + cramer_V_str + "\t" + corrected_pvalue_str + "\t" + module_id + "\t" + module_combined_pvalue_str + "\t" + module_mean_oddsratio_str + "\t" + module_mean_cramer_V_str + "\t" + module_combined_corrected_pvalue_str + "\n")
-                    except:
-                        tsvfile.write(
-                            index + "\t" + fam_name + "\t" + partition + "\t" + pvalue_str + "\t" + oddsratio_str + "\t" + cramer_V_str + "\t" + corrected_pvalue_str + "\t\t\t\t\t\n")
-
         all_corrected_pvals = multipletests(uncorrected_pvalues, alpha=0.05, method='fdr_bh', is_sorted=False, returnsorted=False)[1]
         for index, f in enumerate(self.pangenome.gene_families):
             self.results[f].corrected_pvalue = all_corrected_pvals[index]
         if functional_modules is not None:
             for module, fams in functional_modules.items():
-                mr = ModuleComparisonResult(module, [self.results[f] for f in fams])
+                mr = ModuleComparisonResult(module, [self.results[self.pangenome.get_gene_family(f)] for f in fams])
                 for f in fams:
-                    self.results[f].module_results = mr
+                    self.results[self.pangenome.get_gene_family(f)].module_results = mr
+        with open(dir + "/results_" + self.name + ".tsv", "w") as tsvfile:
+            tsvfile.write("Id\tGene_family_name\tpartition\tpvalue\toddsratio\tV\tcorrected_pvalue\tmodule_id\tmodule_combined_pvalue\tmodule_pooled_oddsratio\tmodule_mean_cramer_V\tmodule_combined_corrected_pvalue\n")
+            for fam_result in sorted(self.results.values(), key=lambda x: x.pvalue):
+                index = str(fam_result.family.ID)
+                fam_name = fam_result.family.name
+                partition = fam_result.family.named_partition
+                pvalue_str = str(fam_result.pvalue)
+                oddsratio_str = str(fam_result.oddsratio)
+                cramer_V_str = str(fam_result.cramer_V)
+                corrected_pvalue_str = str(fam_result.corrected_pvalue)
+                try:
+                    module_id = str(fam_result.module_results.module)
+                    module_combined_pvalue_str = str(fam_result.module_results.combined_pvalue)
+                    module_pooled_oddsratio_str = str(fam_result.module_results.pooled_oddsratio)
+                    module_mean_cramer_V_str = str(fam_result.module_results.mean_cramer_V)
+                    module_combined_corrected_pvalue_str = str(fam_result.module_results.combined_corrected_pvalue)
+                    tsvfile.write(
+                        index + "\t" + fam_name + "\t" + partition + "\t" + pvalue_str + "\t" + oddsratio_str + "\t" + cramer_V_str + "\t" + corrected_pvalue_str + "\t" + module_id + "\t" + module_combined_pvalue_str + "\t" + module_pooled_oddsratio_str + "\t" + module_mean_cramer_V_str + "\t" + module_combined_corrected_pvalue_str + "\n")
+                except:
+                    tsvfile.write(
+                        index + "\t" + fam_name + "\t" + partition + "\t" + pvalue_str + "\t" + oddsratio_str + "\t" + cramer_V_str + "\t" + corrected_pvalue_str + "\t\t\t\t\t\n")
 
         self.performed = True
 

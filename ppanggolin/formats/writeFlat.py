@@ -152,16 +152,22 @@ def write_gexf_header(gexf, light):
     gexf.write('      <attribute id="8" title="length_avg" type="double" />\n')
     gexf.write('      <attribute id="9" title="length_med" type="long" />\n')
     gexf.write('      <attribute id="10" title="nb_organisms" type="long" />\n')
+
+    if len(pan.spots):
+        gexf.write('      <attribute id="12" title="spot" type="string" />\n')
+    if len(pan.modules):
+        gexf.write('      <attribute id="13" title="module" type="string" />\n')
+
     if not light:
         for org, orgIndex in index.items():
-            gexf.write(f'      <attribute id="{orgIndex + 12}" title="{org.name}" type="string" />\n')
+            gexf.write(f'      <attribute id="{orgIndex + 14}" title="{org.name}" type="string" />\n')
 
     gexf.write('    </attributes>\n')
     gexf.write('    <attributes class="edge" mode="static">\n')
     gexf.write('      <attribute id="11" title="nb_genes" type="long" />\n')
     if not light:
         for org, orgIndex in index.items():
-            gexf.write(f'      <attribute id="{orgIndex + len(index) + 12}" title="{org.name}" type="long" />\n')
+            gexf.write(f'      <attribute id="{orgIndex + len(index) + 14}" title="{org.name}" type="long" />\n')
     gexf.write('    </attributes>\n')
     gexf.write('    <meta>\n')
     gexf.write(f'      <creator>PPanGGOLiN {pkg_resources.get_distribution("ppanggolin").version}</creator>\n')
@@ -205,11 +211,17 @@ def write_gexf_nodes(gexf, light, soft_core=0.95):
         gexf.write(f'          <attvalue for="8" value="{round(sum(lis) / len(lis), 2)}" />\n')
         gexf.write(f'          <attvalue for="9" value="{int(median(lis))}" />\n')
         gexf.write(f'          <attvalue for="10" value="{len(fam.organisms)}" />\n')
+        if len(pan.spots) > 0:
+            str_spot = "|".join([str(s.ID) for s in list(fam.spot)])
+            gexf.write(f'      <attvalue for="12" value="{str_spot}"/>\n')
+        if len(pan.modules) > 0:
+            str_module = "|".join([str(m.ID) for m in list(fam.modules)])
+            gexf.write(f'      <attvalue for="13" value="{str_module}"/>\n')
         if not light:
             for org, genes in fam.get_org_dict().items():
                 gexf.write(
                     f'          <attvalue for="'
-                    f'{index[org] + 12}" '
+                    f'{index[org] + 14}" '
                     f'value="{"|".join([gene.ID if gene.local_identifier == "" else gene.local_identifier for gene in genes])}" />\n')
         gexf.write(f'        </attvalues>\n')
         gexf.write(f'      </node>\n')
@@ -229,7 +241,7 @@ def write_gexf_edges(gexf, light):
         gexf.write(f'          <attribute id="11" value="{len(edge.gene_pairs)}" />\n')
         if not light:
             for org, genes in edge.get_org_dict().items():
-                gexf.write(f'          <attvalue for="{index[org] + len(index) + 12}" value="{len(genes)}" />\n')
+                gexf.write(f'          <attvalue for="{index[org] + len(index) + 14}" value="{len(genes)}" />\n')
         gexf.write('        </attvalues>\n')
         gexf.write('      </edge>\n')
         edgeids += 1
@@ -344,7 +356,6 @@ def write_gene_presence_absence(output, compress=False):
             matrix.write('\t'.join([fam.name]  # 14
                                    + genes) + "\n")  # 15
     logging.getLogger().info(f"Done writing the gene presence absence file : '{outname}'")
-
 
 def write_stats(output, soft_core, dup_margin, compress=False):
     logging.getLogger().info("Writing pangenome statistics...")
@@ -752,6 +763,10 @@ def write_flat_files(pangenome, output, cpu=1, soft_core=0.95, dup_margin=0.05, 
         needPartitions = True
     if gexf or light_gexf or json:
         needGraph = True
+        needRegions = True if pan.status["predictedRGP"] == "inFile" else False
+        needSpots = True if pan.status["spots"] == "inFile" else False
+        needModules = True if pan.status["modules"] == "inFile" else False
+
     if regions or spots or borders or spot_modules:
         needRegions = True
     if spots or borders or spot_modules:  # or projection:
