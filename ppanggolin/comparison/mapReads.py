@@ -22,7 +22,7 @@ from ppanggolin.pangenome import Pangenome, GeneFamily, Path, Node
 from ppanggolin.formats.writeSequences import write_fasta_gene_fam, write_gene_sequences_from_annotations
 from ppanggolin.formats.readBinaries import get_gene_sequences_from_file, check_pangenome_info
 
-def map_on_graphs(pangenome, comparison, output_dir, cpu = 1, disable_bar=False):
+def map_on_graphs(pangenome, comparison, output_dir, cpu = 1, min_ident = 0.95, disable_bar=False):
     """ Perform a mapping of reads against the pangenome families
 
     :param pangenome: a pangenome  
@@ -33,6 +33,8 @@ def map_on_graphs(pangenome, comparison, output_dir, cpu = 1, disable_bar=False)
     :type output_dir: str
     :param cpu: number of cpu to use
     :type cpu: int
+    :param min_ident: accept read only if the alignment identity is above this minimum
+    :type min_ident: float
     :param disable_bar: either to disable progress bar of not
     :type disable_bar: bool
     :return: a dictionary where families are keys and the values are dicts where samples are keys and values are reads counting
@@ -57,10 +59,10 @@ def map_on_graphs(pangenome, comparison, output_dir, cpu = 1, disable_bar=False)
         pangenome.fill_from_GFA_file(output_combined_graph_and_mapping + "/all_graph.gfa")
 
     fasta_nuc_pangenome = output_combined_graph_and_mapping+"/all_nucleotide_families.fasta"
-    write_fasta_gene_fam(pangenome, output_combined_graph_and_mapping, False, "all", False, disable_bar=True)
+    write_fasta_gene_fam(pangenome, output_combined_graph_and_mapping, "all", 0.95, False, disable_bar=True)
 
     for sample in tqdm.tqdm(samples_to_be_mapped, disable=disable_bar):
-        logging.getLogger().info("filtering by mapping read over family representatives using minimap2...")
+        logging.getLogger().info("filtering by mapping reads over family representatives using minimap2...")
         if sample.is_pair_end():
             #cmd = ["bowtie2", "-p", str(cpu),"--very-sensitive-local", "-x", index_files_prefix, "-1", readFiles[0], "-2", readFiles[1], "--al-conc", output_local_graphs+"/"+IDsample+"_al_conc.fastq", "--al", output_local_graphs+"/"+IDsample+"_al.fastq"]
             cmd = "minimap2 -x sr -t "+ str(cpu)+" "+fasta_nuc_pangenome+" "+sample.path_read1+" "+sample.path_read2+" | cut -f1"
@@ -91,13 +93,13 @@ def map_on_graphs(pangenome, comparison, output_dir, cpu = 1, disable_bar=False)
                   subprocess.run("vg mpmap -x "+output_combined_graph_and_mapping+"/all_graph.xg -g "+output_combined_graph_and_mapping+"/all_graph.gcsa -s "+output_combined_graph_and_mapping+"/all_graph.snarls -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         else:
             if sample.is_pair_end():
-                logging.getLogger().debug("vg map --min-ident 0.9 -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json")
-                subprocess.run("vg map --min-ident 0.9 -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                logging.getLogger().debug("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json")
+                subprocess.run("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
                 #subprocess.run("vg map -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+IDsample+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping2.json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
                 #subprocess.run("cat "+output_combined_graph_and_mapping+"/mapping1.json "+output_combined_graph_and_mapping+"/mapping2.json > "+output_combined_graph_and_mapping+"/mapping.json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             else:
-                logging.getLogger().debug("vg map --min-ident 0.9 -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json")
-                subprocess.run("vg map --min-ident 0.9 -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                logging.getLogger().debug("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json")
+                subprocess.run("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graph -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 
         logging.getLogger().info("extracts alignments...")
         pangenome_sample_mapping = pangenome
