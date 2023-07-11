@@ -344,6 +344,7 @@ class Comparison:
         self.performed = True
 
     def draw_tileplot_samples(self, output, nocloud=False, filter_by_stats=True):
+        sys.setrecursionlimit(100000)
         if len(self.get_all_covered_samples()) > 500 and nocloud is False:
             logging.getLogger().warning("You asked to draw a tile plot for a lot of samples (>500). Your browser will probably not be able to open it.")
         if len(self.get_all_covered_samples()) == 0:
@@ -679,7 +680,8 @@ def extract_conditions_and_sample_read_files(pangenome : Pangenome, file : str):
                         to_be_compared.path_read1 = elements[3]
                     if len(elements) == 5:
                         to_be_compared.path_read1 = elements[3]
-                        to_be_compared.path_read2 = elements[4]
+                        if elements[4] != "":
+                            to_be_compared.path_read2 = elements[4]
                 if (elements[1] == "1"):
                     comparison.add_sample_or_org(to_be_compared, condition = 1)
                 if (elements[2] == "1"):
