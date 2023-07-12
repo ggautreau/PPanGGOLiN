@@ -219,13 +219,13 @@ class Comparison:
                         nb_covered = sample_or_org.sample_family_persistent_covered
                         conditions.write(f'{sample_or_org.name}\t{self.condition1_name}\t{sample_or_org.covered}\t{sample_or_org.th}\t{nb_covered}\t{nb_covered/nb_persistent}\n')
                     else:
-                        conditions.write(sample_or_org.name + "\t"+conditions.condition1_name+"\t\t\t\t\n")
+                        conditions.write(sample_or_org.name + "\t"+self.condition1_name+"\t\t\t\t\n")
                 elif sample_or_org.name in self.condition2_samples_or_orgs and sample_or_org.name not in self.condition1_samples_or_orgs:
                     if sample_or_org in self.get_all_samples():
                         nb_covered = sample_or_org.sample_family_persistent_covered
                         conditions.write(f'{sample_or_org.name}\t{self.condition2_name}\t{sample_or_org.covered}\t{sample_or_org.th}\t{nb_covered}\t{nb_covered/nb_persistent}\n')
                     else:
-                        conditions.write(sample_or_org.name + "\t" + conditions.condition2_name + "\t\t\t\t\n")
+                        conditions.write(sample_or_org.name + "\t" + self.condition2_name + "\t\t\t\t\n")
 
     def write_used_dataset_binary_matrix(self, condition = "both", dir = None):
         with open(dir + "/dataset_" + condition + "_" + self.name + "_binary.tsv", "w") as dataset:
@@ -347,7 +347,7 @@ class Comparison:
         sys.setrecursionlimit(100000)
         if len(self.get_all_covered_samples()) > 500 and nocloud is False:
             logging.getLogger().warning("You asked to draw a tile plot for a lot of samples (>500). Your browser will probably not be able to open it.")
-        if len(self.get_all_covered_samples()) == 0:
+        if len(self.get_all_covered_samples()) <2 :
             logging.getLogger().warning("Plotting aborted. Not enough covered samples.")
             return(None)
         # samples_dataset1 = []
@@ -710,8 +710,12 @@ def launch(args):
             samples = list([s for s in comparison.get_all_samples()])
             count_matrix.write("\t".join(["gene_families"]+[s.name for s in samples])+"\n")
             for gf in pangenome.gene_families:
-                count_matrix.write("\t".join([str(gf.name)]+[str(comparison.sample_counts_gene_families[gf][s]) for s in samples])+"\n")
 
+                try:
+                    count_matrix.write("\t".join([str(gf.name)]+[str(comparison.sample_counts_gene_families[gf][s]) for s in samples])+"\n")
+                except:
+                    import pdb;
+                    pdb.set_trace()
     #TODO retreive this information from .h5 file
     functional_modules=None
     if args.import_functional_modules is not None:
