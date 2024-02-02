@@ -25,6 +25,7 @@ import ppanggolin.align
 import ppanggolin.RGP
 import ppanggolin.mod
 import ppanggolin.context
+import ppanggolin.comparison
 import ppanggolin.workflow
 import ppanggolin.meta
 import ppanggolin.utility
@@ -80,6 +81,9 @@ def cmd_line() -> argparse.Namespace:
     desc += "  \n"
     desc += "  Utility command:\n"
     desc += "    utils      Helper side commands."
+    desc += "  Contrasting families according to a comparison:\n"
+    desc += "    compare      Compare organisms or samples conditions to identify contrasting families\n"
+    desc += "  \n"
 
     parser = argparse.ArgumentParser(
         description="Depicting microbial species diversity via a Partitioned PanGenome Graph Of Linked Neighbors",
@@ -215,6 +219,8 @@ def main():
         ppanggolin.mod.launch(args)
     elif args.subcommand == "panmodule":
         ppanggolin.workflow.panModule.launch(args)
+    elif args.subcommand == "compare":
+        ppanggolin.comparison.compareConditions.launch(args)
     elif args.subcommand == "all":
         ppanggolin.workflow.all.launch(args)
     elif args.subcommand == "context":
@@ -223,7 +229,6 @@ def main():
         ppanggolin.meta.launch(args)
     elif args.subcommand == "utils":
         ppanggolin.utility.launch(args)
-
 
 if __name__ == "__main__":
     main()

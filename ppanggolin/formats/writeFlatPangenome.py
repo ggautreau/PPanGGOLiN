@@ -199,6 +199,15 @@ def write_gexf_header(gexf: TextIO, light: bool = True):
     gexf.write('      <attribute id="9" title="length_med" type="long" />\n')
     gexf.write('      <attribute id="10" title="nb_genomes" type="long" />\n')
 
+    if len(pan.spots):
+        gexf.write('      <attribute id="12" title="spot" type="string" />\n')
+    if len(pan.modules):
+        gexf.write('      <attribute id="13" title="module" type="string" />\n')
+
+    if not light:
+        for org, orgIndex in index.items():
+            gexf.write(f'      <attribute id="{orgIndex + 14}" title="{org.name}" type="string" />\n')
+
     if pan.number_of_spots > 0:
         gexf.write('      <attribute id="12" title="spot" type="string" />\n')
     if pan.number_of_modules > 0:
@@ -462,7 +471,6 @@ def write_gene_presence_absence(output: Path, compress: bool = False):
             matrix.write('\t'.join([fam.name]  # 14
                                    + genes) + "\n")  # 15
     logging.getLogger("PPanGGOLiN").info(f"Done writing the gene presence absence file : '{outname.as_posix()}'")
-
 
 def summarize_genome(organism: Organism,
                      pangenome_persistent_count: int,
