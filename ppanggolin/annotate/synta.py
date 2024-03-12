@@ -101,8 +101,10 @@ def launch_prodigal(contig_sequences: Dict[str, str], org: Organism, code: int =
         mask=True,  # -m: Treat runs of N as masked sequence; don't build genes across them.
         min_gene=120  # This is to prevent error with mmseqs translatenucs that cut too short sequences
     )
-    gene_finder.train(max(sequences.values(), key=len), force_nonsd=False,
-                      translation_table=code)  # -g: Specify a translation table to use (default 11).
+
+    if not use_meta:
+        gene_finder.train(*contig_sequences.values(), force_nonsd=False,
+                        translation_table=code)  # -g: Specify a translation table to use (default 11).
     gene_counter = 1
     for contig_name, sequence in sequences.items():
         for pred in gene_finder.find_genes(sequence):
@@ -167,7 +169,7 @@ def read_fasta(org: Organism, fna_file: Union[TextIOWrapper, list]) -> Dict[str,
     :param org: Organism corresponding to fasta file
     :param fna_file: Input fasta file with sequences or list of each line as sequence
 
-    :return: Dictionnary with contig_name as keys and contig sequence in values
+    :return: Dictionary with contig_name as keys and contig sequence in values
     """
     global contig_counter
     try:
@@ -197,8 +199,8 @@ def read_fasta(org: Organism, fna_file: Union[TextIOWrapper, list]) -> Dict[str,
         raise AttributeError(f"{e}\nAn error was raised when reading file: '{fna_file.name}'. "
                              f"One possibility for this error is that the file did not start with a '>' "
                              f"as it would be expected from a fna file.")
-    except Exception:  # To manage other exception which can occur
-        raise Exception("Unexpected error. Please check your input file and if everything looks fine, "
+    except Exception as err:  # To manage other exception which can occur
+        raise Exception(f"{err}: Please check your input file and if everything looks fine, "
                         "please post an issue on our github")
     return contigs
 
@@ -333,6 +335,8 @@ def annotate_organism(org_name: str, file_name: Path, circular_contigs: List[str
         max_contig_len = max(len(contig) for contig in org.contigs)
         if max_contig_len < 20000:  # case of short sequence
             use_meta = True
+            logging.getLogger("PPanGGOLiN").info(f"Using the metagenomic mode to predict genes for {org_name}, as all its contigs are < 20KB in size.")
+
         else:
             use_meta = False
     else:
