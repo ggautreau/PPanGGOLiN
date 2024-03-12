@@ -61,7 +61,8 @@ python_deps = [
     "pandas==2.*",
     "colorlover==0.3",
     "numpy==1.24",
-    "bokeh==3.*"
+    "bokeh==3.*",
+    "statsmodels==0.14.0"
 ]
 #
 [project.urls]

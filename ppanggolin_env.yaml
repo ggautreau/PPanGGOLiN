@@ -16,8 +16,12 @@ dependencies:
   - colorlover=0.3
   - numpy=1.24
   - bokeh=3
+  - statsmodels=0.14
   # Tool that are not in python 
   - infernal=1
   - aragorn=1
   - mmseqs2=15
   - mafft=7
+  - vg=1.55.0
+  - seqwish=0.7.9
+  - minimap2=2.26
