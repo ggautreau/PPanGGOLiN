@@ -143,7 +143,7 @@ def cmd_line() -> argparse.Namespace:
 
     cmds_pangenome_required = ["cluster", "info", "module", "graph", "align",
                                "context", "write_pangenome", "write_genomes", "msa", "draw", "partition",
-                               "rarefaction", "spot", "fasta", "metrics", "rgp", "projection", "metadata"]
+                               "rarefaction", "spot", "fasta", "metrics", "rgp", "projection", "metadata","compare"]
     if args.subcommand in cmds_pangenome_required and args.pangenome is None:
         parser.error("Please specify a pangenome file using the --pangenome argument, "
                      "either through the command line or the config file.")

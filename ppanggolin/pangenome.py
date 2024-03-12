@@ -2,7 +2,6 @@
 # coding: utf8
 
 # default libraries
-<<<<<<< HEAD
 import logging
 import re
 from typing import List, Union, Dict, Set, Generator
@@ -24,7 +23,7 @@ class Node:
         self.len_sequence = len(sequence)   # we need to remind the length of the sequence of each node for statistical computations
         self.traversed_path = []            # ids (int) of the traversed paths. This corresponds to indexes in the Pangenome.paths list
         self.sequence = sequence
-class Path:
+class VGPath:
     """A class representing a VG path composed of several nodes"""
     def __init__(self, ID):
         self.ID = ID
@@ -63,9 +62,6 @@ class Pangenome:
         self._orgGetter = {}
         self._edgeGetter = {}
         self._regionGetter = {}
-        self.spots = set()
-        self.modules = set()
-        ###
         self.nodes = {}                     # key: id (unsigned int), value: Node 
         self.paths = []                     # a list of ordered paths (id of a path is its ranks in this list)
         self.paths_name_to_ids = {}         # no choice: each path has a string name, eg gi|1388876906|ref|NZ_CP028116.1|_1000. Two identical paths (eg 684619+,684620+,684618+) may have distinct occurrences and thus names (as comming from distinct genes). Hence one storesfor each path name its unique path id.
@@ -96,7 +92,7 @@ class Pangenome:
                             "genomes": [],
                             "RGPs": [],
                             "spots": [],
-                            "modules": []}
+                            "modules": []},
             'variation_graphs': 'No'
         }
         self.parameters = {}
@@ -799,7 +795,7 @@ class Pangenome:
                         self.paths_name_to_ids[line[1]] = already_seen_path_id
                         continue # nothing more to do, no incrementation of path_id, as no new path was created
 
-                    path = Path(path_id)
+                    path = VGPath(path_id)
                     path.family=gene.family
                     if gene.organism not in path.organisms:
                         path.organisms[gene.organism]=0

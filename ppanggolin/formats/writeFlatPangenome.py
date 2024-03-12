@@ -199,11 +199,6 @@ def write_gexf_header(gexf: TextIO, light: bool = True):
     gexf.write('      <attribute id="9" title="length_med" type="long" />\n')
     gexf.write('      <attribute id="10" title="nb_genomes" type="long" />\n')
 
-    if len(pan.spots):
-        gexf.write('      <attribute id="12" title="spot" type="string" />\n')
-    if len(pan.modules):
-        gexf.write('      <attribute id="13" title="module" type="string" />\n')
-
     if not light:
         for org, orgIndex in index.items():
             gexf.write(f'      <attribute id="{orgIndex + 14}" title="{org.name}" type="string" />\n')

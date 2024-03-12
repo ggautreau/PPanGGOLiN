@@ -14,6 +14,7 @@ import ppanggolin.context
 import ppanggolin.workflow
 import ppanggolin.projection
 import ppanggolin.meta
+import ppanggolin.comparison
 
 SUBCOMMAND_TO_SUBPARSER = {
     "annotate": ppanggolin.annotate.subparser,
@@ -39,7 +40,7 @@ SUBCOMMAND_TO_SUBPARSER = {
     "projection":ppanggolin.projection.subparser,
     "rgp_cluster":ppanggolin.RGP.rgp_cluster.subparser,
     "metadata": ppanggolin.meta.subparser,
-    "compare": ppanggolin.comparison.compareConditions.subparser,
+    "compare": ppanggolin.comparison.subparser,
 }
 
 
