@@ -14,6 +14,7 @@ from multiprocessing import Pool
 import textwrap
 from operator import xor
 from math import inf
+from pathlib import Path
 
 # installed libraries
 import numpy as np
@@ -99,9 +100,9 @@ class Comparison:
         self.condition1_samples_or_orgs = {}
         self.condition2_samples_or_orgs = {}
 
-        self.sample_counts_gene_families = dict(zip(self.pangenome.gene_families,[dict() for i in range(self.pangenome.number_of_gene_families())]))
+        self.sample_counts_gene_families = dict(zip(self.pangenome.gene_families,[dict() for i in range(self.pangenome.number_of_gene_families)]))
         self.performed = False
-        self.results = dict(zip(self.pangenome.gene_families,[None]*self.pangenome.number_of_gene_families()))
+        self.results = dict(zip(self.pangenome.gene_families,[None]*self.pangenome.number_of_gene_families))
         if name is None:
             self.name = self.condition1_name+"_vs_"+self.condition2_name
 
@@ -205,7 +206,7 @@ class Comparison:
         return(ret)
 
     def write_conditions(self, dir = None):
-        with open(dir + "/conditions_" + self.name + ".tsv", "w") as conditions:
+        with open(dir.joinpath("conditions_" + self.name + ".tsv"), "w") as conditions:
             samples = list(self.get_all_samples(condition=1) | self.get_all_samples(condition=2))
             orgs = list(self.get_all_orgs(condition=1) | self.get_all_orgs(condition=2))
             nb_persistent = 0
@@ -228,7 +229,7 @@ class Comparison:
                         conditions.write(sample_or_org.name + "\t" + self.condition2_name + "\t\t\t\t\n")
 
     def write_used_dataset_binary_matrix(self, condition = "both", dir = None):
-        with open(dir + "/dataset_" + condition + "_" + self.name + "_binary.tsv", "w") as dataset:
+        with open(dir.joinpath("dataset_" + condition + "_" + self.name + "_binary.tsv"), "w") as dataset:
             samples = list(self.get_all_covered_samples(condition=condition))
             orgs = list(self.get_all_orgs(condition=condition))
             dataset.write("\t".join(["gene_families"] + [str(s_or_o.name) for s_or_o in samples + orgs]) + "\n")
@@ -236,7 +237,7 @@ class Comparison:
                 dataset.write("\t".join([str(gf.name)] + ["1" if self.sample_counts_gene_families[gf][s] > s.th else "0" for s in samples] + ["1" if org in gf.organisms else "0" for org in orgs]) + "\n")
 
     def write_used_dataset_count(self, condition = "both", dir = None):
-        with open(dir + "/dataset_" + condition + "_" + self.name + "_counts.tsv", "w") as dataset:
+        with open(dir.joinpath("dataset_" + condition + "_" + self.name + "_counts.tsv"), "w") as dataset:
             samples = list(self.get_all_samples(condition=condition).intersection(self.get_all_covered_samples()))
             dataset.write("\t".join(["#th_samples"] + [str(s.th) for s in samples]) + "\n")
             dataset.write("\t".join(["gene_families"] + [str(s.name) for s in samples]) + "\n")
@@ -319,7 +320,7 @@ class Comparison:
                 mr = ModuleComparisonResult(module, [self.results[self.pangenome.get_gene_family(f)] for f in fams])
                 for f in fams:
                     self.results[self.pangenome.get_gene_family(f)].module_results = mr
-        with open(dir + "/results_" + self.name + ".tsv", "w") as tsvfile:
+        with open(dir.joinpath("results_" + self.name + ".tsv"), "w") as tsvfile:
             tsvfile.write("Id\tGene_family_name\tpartition\tpvalue\toddsratio\tV\tcorrected_pvalue\tmodule_id\tmodule_combined_pvalue\tmodule_pooled_oddsratio\tmodule_mean_cramer_V\tmodule_combined_corrected_pvalue\n")
             for fam_result in sorted(self.results.values(), key=lambda x: x.pvalue):
                 index = str(fam_result.family.ID)
@@ -677,11 +678,11 @@ def extract_conditions_and_sample_read_files(pangenome : Pangenome, file : str):
                 except KeyError as e:
                     to_be_compared = Sample(genomes_or_sample_name)
                     if len(elements) == 4:
-                        to_be_compared.path_read1 = elements[3]
+                        to_be_compared.path_read1 = Path(elements[3])
                     if len(elements) == 5:
-                        to_be_compared.path_read1 = elements[3]
+                        to_be_compared.path_read1 = Path(elements[3])
                         if elements[4] != "":
-                            to_be_compared.path_read2 = elements[4]
+                            to_be_compared.path_read2 = Path(elements[4])
                 if (elements[1] == "1"):
                     comparison.add_sample_or_org(to_be_compared, condition = 1)
                 if (elements[2] == "1"):
@@ -706,7 +707,7 @@ def launch(args):
         comparison.import_count_matrix(count_matrix_file=args.import_count_matrix)
     if len(comparison.get_all_samples_having_counts(reversed=True)) > 0:
         map_on_graphs(pangenome, comparison, output_dir = args.output, min_ident=args.min_identity, cpu= args.cpu)
-        with open(args.output+"/count_matrix_"+comparison.name+".tsv","w") as count_matrix:
+        with open(args.output.joinpath("count_matrix_"+comparison.name+".tsv"),"w") as count_matrix:
             samples = list([s for s in comparison.get_all_samples()])
             count_matrix.write("\t".join(["gene_families"]+[s.name for s in samples])+"\n")
             for gf in pangenome.gene_families:
@@ -726,7 +727,7 @@ def launch(args):
                                    th_ratio_persistent_mean_coverage = args.th_ratio_persistent_mean_coverage,
                                    dir = args.output)
 
-    comparison.draw_tileplot_samples(args.output+"/tile_plot_samples_"+comparison.name, nocloud=args.plot_nocloud, filter_by_stats=True)
+    comparison.draw_tileplot_samples(args.output.joinpath("tile_plot_samples_"+comparison.name), nocloud=args.plot_nocloud, filter_by_stats=True)
     logging.getLogger().debug("end of performCompararison step")
 
 def subparser(sub_parser):
@@ -747,9 +748,9 @@ def parser_compare(parser):
 
     required = parser.add_argument_group(title = "Required arguments",
                                          description = "All of the following arguments are required :")
-    required.add_argument('-p', '--pangenome',  required=True, type=str, help="The pangenome .h5 file")
-    required.add_argument('-o', '--output', required=True, type=str, help="Output directory where the file(s) will be written")
-    required.add_argument('-cf', '--conditions_file', required=True, type=str, help='''The elements included in the two conditions (either genomes or samples, mixed or not) and if necessary R1 and R2 reads paths of the samples to map them against the pangenome. Here is a toy example file (header required and elements must be tab-separated):
+    required.add_argument('-p', '--pangenome',  required=True, type=Path, help="The pangenome .h5 file")
+    required.add_argument('-o', '--output', required=True, type=Path, help="Output directory where the file(s) will be written")
+    required.add_argument('-cf', '--conditions_file', required=True, type=Path, help='''The elements included in the two conditions (either genomes or samples, mixed or not) and if necessary R1 and R2 reads paths of the samples to map them against the pangenome. Here is a toy example file (header required and elements must be tab-separated):
     sample_or_organism  condition1 condition2 R1                 R2
     sample1             1          0          sample1_1.fastq.gz sample1_2.fastq.gz
     sample2             0          1          sample2_1.fastq.gz sample2_2.fastq.gz
@@ -758,17 +759,19 @@ def parser_compare(parser):
     organism_2          0          1''')
 
     optional = parser.add_argument_group(title="Optional arguments")
-    optional.add_argument('--import_count_matrix', default=None, required = False, type = str, help ='''Allow to import a previously computed mapping of samples against the pangenome families. Here is a toy example file (header required and elements must be tab-separated):
+    optional.add_argument('--import_count_matrix', default=None, required = False, type = Path, help ='''Allow to import a previously computed mapping of samples against the pangenome families. Here is a toy example file (header required and elements must be tab-separated):
     families  sample1 sample2 sample3
     families1 1.2     1.5     0.6
     families2 4.1     2.1     0.8
     families3 2.8     0       0.4''')
-    optional.add_argument('--import_functional_modules', default=None, required = False, type = str, help = "Allow to import the list of module associated with each families. This correspond to the \"functional_modules.tsv\" file generate by the sub command \"module\"")
+    optional.add_argument('--import_functional_modules', default=None, required = False, type = Path, help = "Allow to import the list of module associated with each families. This correspond to the \"functional_modules.tsv\" file generate by the sub command \"module\"")
     optional.add_argument('--min_cov_persistent',required=False, type=restricted_float, default=0.85, help = "Specify the ratio of persistent genome to be covered to include a sample in the comparison")
     optional.add_argument('--th_ratio_persistent_mean_coverage', required=False, type=restricted_float, default=0.05, help = "The percentile of the persistent genome distribution which coverage above means presence and below means absence")
     optional.add_argument("--plot_nocloud", required=False, default=False, action="store_true",
                           help="Do not draw the cloud in the tile plot")
     optional.add_argument("--min_identity", required=False, type=restricted_float, default=0.95, help = "Accept each read only if the alignment identity is above this minimum")
+    optional.add_argument("-c", "--cpu", required=False, default=1, type=int, help="Number of available cpus")
+
     return parser
 
 if __name__ == '__main__':

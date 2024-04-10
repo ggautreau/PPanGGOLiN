@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         os: ['ubuntu-latest','macos-latest']
-        python-version: ['3.7','3.8','3.9','3.10']
+        python-version: ['3.8','3.9','3.10']
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -26,9 +26,8 @@ jobs:
       # Setting up miniconda
       - uses: conda-incubator/setup-miniconda@v2
         with:
-          condarc-file: .condarc.yml
-          activate-environment: test
           python-version: ${{ matrix.python-version }}
+          channels: conda-forge,bioconda,defaults
       - name: Set up test environment
         shell: bash -l {0}
         run: |
@@ -42,5 +41,5 @@ jobs:
         shell: bash -l {0}
         run: |
           cd testingDataset/
-          ppanggolin all --cpu 1 --anno organisms.gbff.list -o pango
+          ppanggolin all --cpu 1 --anno genomes.gbff.list -o pango
           ppanggolin info -p pango/pangenome.h5 --content --parameters --status

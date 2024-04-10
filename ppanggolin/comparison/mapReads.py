@@ -18,7 +18,7 @@ import tqdm
 
 #local libraries
 from ppanggolin.utils import read_compressed_or_not, write_compressed_or_not, get_file_size, filter_fastq, reverse_sign
-from ppanggolin.pangenome import Pangenome, GeneFamily, Path, Node
+from ppanggolin.pangenome import Pangenome, GeneFamily, VGPath, Node
 from ppanggolin.formats.writeSequences import write_fasta_gene_fam, write_gene_sequences_from_annotations
 from ppanggolin.formats.readBinaries import get_gene_sequences_from_file, check_pangenome_info
 
@@ -42,70 +42,62 @@ def map_on_graphs(pangenome, comparison, output_dir, cpu = 1, min_ident = 0.95, 
     """
     samples_to_be_mapped = comparison.get_all_samples_having_counts(reversed=True)
     check_pangenome_info(pangenome, need_gene_sequences=True)
-    output_local_graphs=output_dir+"/local_graphs/"
-    output_combined_graph_and_mapping=output_dir+"/graph_mapping/"
+    output_local_graphs=output_dir.joinpath("local_graphs/")
+    output_combined_graph_and_mapping=output_dir.joinpath("graph_mapping/")
     if not os.path.exists(output_local_graphs):
         os.makedirs(output_local_graphs)
     if not os.path.exists(output_combined_graph_and_mapping):
         os.makedirs(output_combined_graph_and_mapping)
 
-    if not (os.path.exists(output_combined_graph_and_mapping+"/all_graphs.xg") and
-            os.path.exists(output_combined_graph_and_mapping+"/all_graphs.gcsa") and
-            os.path.exists(output_combined_graph_and_mapping+"/all_graphs.snarls") and
-            os.path.exists(output_combined_graph_and_mapping+"/all_graphs.vg") and
-            os.path.exists(output_combined_graph_and_mapping+"/all_graphs.gfa")):
+    if not (os.path.exists(output_combined_graph_and_mapping.joinpath("all_graphs.xg")) and
+            os.path.exists(output_combined_graph_and_mapping.joinpath("all_graphs.gcsa")) and
+            os.path.exists(output_combined_graph_and_mapping.joinpath("all_graphs.snarls")) and
+            os.path.exists(output_combined_graph_and_mapping.joinpath("all_graphs.vg")) and
+            os.path.exists(output_combined_graph_and_mapping.joinpath("all_graphs.gfa"))):
         make_graphs(pangenome=pangenome, output_local_graphs=output_local_graphs, output_combined_graph_and_mapping=output_combined_graph_and_mapping, cpu=cpu)
     if pangenome.status["variation_graphs"] == "No":
-        pangenome.fill_from_GFA_file(output_combined_graph_and_mapping + "/all_graphs.gfa")
+        pangenome.fill_from_GFA_file(output_combined_graph_and_mapping.joinpath("all_graphs.gfa"))
 
-    fasta_nuc_pangenome = output_combined_graph_and_mapping+"/all_nucleotide_families.fasta"
+    fasta_nuc_pangenome = output_combined_graph_and_mapping.joinpath("all_nucleotide_families.fasta")
     write_fasta_gene_fam(pangenome, output_combined_graph_and_mapping, "all", 0.95, False, disable_bar=True)
 
     for sample in tqdm.tqdm(samples_to_be_mapped, disable=disable_bar):
         logging.getLogger().info("filtering by mapping reads over family representatives using minimap2...")
         if sample.is_pair_end():
             #cmd = ["bowtie2", "-p", str(cpu),"--very-sensitive-local", "-x", index_files_prefix, "-1", readFiles[0], "-2", readFiles[1], "--al-conc", output_local_graphs+"/"+IDsample+"_al_conc.fastq", "--al", output_local_graphs+"/"+IDsample+"_al.fastq"]
-            cmd = "minimap2 -x sr -t "+ str(cpu)+" "+fasta_nuc_pangenome+" "+sample.path_read1+" "+sample.path_read2+" | cut -f1"
+            cmd = "minimap2 -x sr -t "+ str(cpu)+" "+str(fasta_nuc_pangenome)+" "+str(sample.path_read1)+" "+str(sample.path_read2)+" | cut -f1"
         else:
-            cmd = "minimap2 -x sr -t "+ str(cpu)+" "+fasta_nuc_pangenome+" "+sample.path_read1 +" | cut -f1"
+            cmd = "minimap2 -x sr -t "+ str(cpu)+" "+str(fasta_nuc_pangenome)+" "+str(sample.path_read1) +" | cut -f1"
             #cmd = ["bowtie2", "-p", str(cpu),"--very-sensitive-local", "-x", index_files_prefix, "-U", readFiles[0], "--al", output_local_graphs+"/"+IDsample+"_al.fastq"]
         print(cmd)
 
-        if not (os.path.exists(output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq") or (os.path.exists(output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq") and os.path.exists(output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq"))):
+        if not (os.path.exists(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_1.fastq")) or (os.path.exists(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_1.fastq")) and os.path.exists(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_2.fastq")))):
             selected_reads = str(subprocess.check_output(cmd, shell=True))
             selected_reads = selected_reads[2:]
+            selected_reads = selected_reads[:-3]
             selected_reads = selected_reads.split("\\n")
             selected_reads = set(selected_reads)
-            filter_fastq(sample.path_read1, output_combined_graph_and_mapping + "/" + sample.name + "_selected_1.fastq", selected_reads)
+            filter_fastq(sample.path_read1, output_combined_graph_and_mapping.joinpath(sample.name + "_selected_1.fastq"), selected_reads)
             if sample.is_pair_end():
-                filter_fastq(sample.path_read2, output_combined_graph_and_mapping + "/" + sample.name + "_selected_2.fastq", selected_reads)
+                filter_fastq(sample.path_read2, output_combined_graph_and_mapping.joinpath(sample.name + "_selected_2.fastq"), selected_reads)
         logging.getLogger().info("mapping reads over the variation graph of each gene family...")
         multimap=False
         if multimap:
             if sample.is_pair_end():
-                logging.getLogger().debug("vg mpmap -x "+output_combined_graph_and_mapping+"/all_graphs.xg -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -s "+output_combined_graph_and_mapping+"/all_graphs.snarls -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping.json")
-                subprocess.run("vg mpmap -x "+output_combined_graph_and_mapping+"/all_graphs.xg -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -s "+output_combined_graph_and_mapping+"/all_graphs.snarls -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping.json", stdout=subprocess.PIPE, shell=True)
-                #print("vg mpmap -x "+output_combined_graph_and_mapping+"/all_graphs.xg -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -s "+output_combined_graph_and_mapping+"/all_graphs.snarls -f "+output_combined_graph_and_mapping+"/"+IDsample+"_al.fastq -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping2.json")
-                #subprocess.run("vg mpmap -x "+output_combined_graph_and_mapping+"/all_graphs.xg -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -s "+output_combined_graph_and_mapping+"/all_graphs.snarls -f "+output_combined_graph_and_mapping+"/"+IDsample+"_al.fastq -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping2.json", stdout=subprocess.PIPE, shell=True)
-                #subprocess.run("cat "+output_combined_graph_and_mapping+"/mapping1.json "+output_combined_graph_and_mapping+"/mapping2.json > "+output_combined_graph_and_mapping+"/mapping.json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                subprocess.run("vg mpmap -x "+str(output_combined_graph_and_mapping.joinpath("all_graphs.xg"))+ "-g "+str(output_combined_graph_and_mapping.joinpath("all_graphs.gcsa"))+ " -s "+str(output_combined_graph_and_mapping("all_graphs.snarls")) + "-f "+str(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_1.fastq"))+" -f "+str(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_2.fastq")) +" -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+str(output_combined_graph_and_mapping.joinpath("mapping.json")), stdout=subprocess.PIPE, shell=True)
             else:
-                  logging.getLogger().debug("vg mpmap -x "+output_combined_graph_and_mapping+"/all_graphs.xg -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -s "+output_combined_graph_and_mapping+"/all_graphs.snarls -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json")
-                  subprocess.run("vg mpmap -x "+output_combined_graph_and_mapping+"/all_graphs.xg -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -s "+output_combined_graph_and_mapping+"/all_graphs.snarls -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                  subprocess.run("vg mpmap -x "+str(output_combined_graph_and_mapping.joinpath("all_graphs.xg"))+" -g "+str(output_combined_graph_and_mapping.joinpath("all_graphs.gcsa")) +" -s "+str(output_combined_graph_and_mapping("all_graphs.snarls"))+" -f "+str(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_1.fastq"))+" -t "+str(cpu)+" -M 10 -m -L 0 | vg view -K -j - > "+str(output_combined_graph_and_mapping.joinpath("mapping_"+sample.name+".json")), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         else:
             if sample.is_pair_end():
-                logging.getLogger().debug("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graphs -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json")
-                subprocess.run("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graphs -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq"+" -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_2.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-                #subprocess.run("vg map -L 0 -d "+output_combined_graph_and_mapping+"/all_graphs -f "+output_combined_graph_and_mapping+"/"+IDsample+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping2.json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-                #subprocess.run("cat "+output_combined_graph_and_mapping+"/mapping1.json "+output_combined_graph_and_mapping+"/mapping2.json > "+output_combined_graph_and_mapping+"/mapping.json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                subprocess.run("vg map --min-ident "+str(min_ident)+" -L 0 -d "+str(output_combined_graph_and_mapping.joinpath("all_graphs"))+" -f "+str(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_1.fastq"))+" -f "+str(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_2.fastq"))+" -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+str(output_combined_graph_and_mapping.joinpath("mapping_"+sample.name+".json")), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             else:
-                logging.getLogger().debug("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graphs -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json")
-                subprocess.run("vg map --min-ident "+str(min_ident)+" -L 0 -d "+output_combined_graph_and_mapping+"/all_graphs -f "+output_combined_graph_and_mapping+"/"+sample.name+"_selected_1.fastq -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+output_combined_graph_and_mapping+"/mapping_"+sample.name+".json", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                subprocess.run("vg map --min-ident "+str(min_ident)+" -L 0 -d "+str(output_combined_graph_and_mapping.joinpath("all_graphs"))+" -f "+str(output_combined_graph_and_mapping.joinpath(sample.name+"_selected_1.fastq"))+" -t "+str(cpu)+" | vg view -a -k - | vg view -K -j - > "+str(output_combined_graph_and_mapping.joinpath("mapping_"+sample.name+".json")), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 
         logging.getLogger().info("extracts alignments...")
         pangenome_sample_mapping = pangenome
         pangenome_sample_mapping.__class__ = PangenomeSampleMapping
         pangenome_sample_mapping.extends(sample)
-        parse_vgmpmap(output_combined_graph_and_mapping+"/mapping_"+str(sample.name)+".json", pangenome_sample_mapping, thr=0.7, force_se=False)
+        parse_vgmpmap(output_combined_graph_and_mapping.joinpath("mapping_"+str(sample.name)+".json"), pangenome_sample_mapping, thr=0.7, force_se=False)
         for f in pangenome.gene_families:
             comparison.add_sample_counts_gene_families(sample,f,0)# initialize to zero
         for path in pangenome_sample_mapping.paths:
@@ -133,7 +125,7 @@ def make_graphs(pangenome, output_local_graphs, output_combined_graph_and_mappin
     
     import copy
     for fam in pangenome.gene_families:
-        temp_dir=output_local_graphs+"/"+str(fam.ID)
+        temp_dir=output_local_graphs.joinpath(str(fam.ID))
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
         fam_genes_fasta_path = f"{temp_dir}/{fam.ID}_genes.fasta"
@@ -143,11 +135,11 @@ def make_graphs(pangenome, output_local_graphs, output_combined_graph_and_mappin
                 get_gene_sequences_from_file(pangenome.file, fasta, set([gene.ID for gene in fam.genes]),
                                              disable_bar=True)
             elif pangenome.status["geneSequences"] in ["Computed", "Loaded"]:
-                write_gene_sequences_from_annotations(pangenome, fasta, fam.genes, disable_bar=True)
+                write_gene_sequences_from_annotations(fam.genes, fasta, disable_bar=True)
             else:
                 # this should never happen if the pangenome has been properly checked before launching this function.
                 raise Exception("The pangenome does not include gene sequences")
-        args_local_graphs.append([copy.copy(str(fam.ID)), copy.copy(len(fam.genes)), copy.copy(temp_dir), copy.copy(fam_genes_fasta_path)])
+        args_local_graphs.append([copy.copy(str(fam.ID)), copy.copy(len(fam)), copy.copy(temp_dir), copy.copy(fam_genes_fasta_path)])
 
     if cpu > 1:
         with Pool(processes = cpu) as p:
@@ -160,24 +152,24 @@ def make_graphs(pangenome, output_local_graphs, output_combined_graph_and_mappin
         return [input_list[i:i + chunk_size] for i in range(0, len(input_list), chunk_size)]
     #subprocess.run(['vg', 'ids', '-j', '-c'] + glob.glob(output_local_graphs+"/*/*.vg"))
     nb_chunk=0
-    for i, chunk in enumerate(chunk_list(glob.glob(output_local_graphs + "/*/*.vg"), 10000)):
-        with open(output_combined_graph_and_mapping+"/all_graphs_chunk_"+str(i)+".vg","w") as out_file:
-            logging.getLogger().debug(['vg', 'combine'] + glob.glob(output_local_graphs+"/*/*.vg"))
+    for i, chunk in enumerate(chunk_list(glob.glob(str(output_local_graphs) + "/*/*.vg"), 10000)):
+        with open(output_combined_graph_and_mapping.joinpath("all_graphs_chunk_"+str(i)+".vg"),"w") as out_file:
+            logging.getLogger().debug(['vg', 'combine'] + glob.glob(str(output_local_graphs)+"/*/*.vg"))
             subprocess.run(['vg', 'combine'] + chunk, stdout=out_file)
-        nb_chunk=i
-    with open(output_combined_graph_and_mapping + "/all_graphs.vg", "w") as out_file:
-        logging.getLogger().debug(['vg', 'combine'] + [output_combined_graph_and_mapping+"/all_graphs_chunk_"+str(j)+".vg" for j in range(nb_chunk)])
-        subprocess.run(['vg', 'combine'] + [output_combined_graph_and_mapping+"/all_graphs_chunk_"+str(j)+".vg" for j in range(nb_chunk)], stdout=out_file)
+        nb_chunk+=1
+    with open(output_combined_graph_and_mapping.joinpath("all_graphs.vg"), "w") as out_file:
+        logging.getLogger().debug(['vg', 'combine'] + [output_combined_graph_and_mapping.joinpath("all_graphs_chunk_"+str(j)+".vg") for j in range(nb_chunk)])
+        subprocess.run(['vg', 'combine'] + [output_combined_graph_and_mapping.joinpath("all_graphs_chunk_"+str(j)+".vg") for j in range(nb_chunk)], stdout=out_file)
 
-    logging.getLogger().debug(['vg', 'index', "-t", str(cpu), "-x", output_combined_graph_and_mapping+"/all_graphs.xg", output_combined_graph_and_mapping+"/all_graphs.vg"])
-    subprocess.run(['vg', 'index', "-t", str(cpu), "-x", output_combined_graph_and_mapping+"/all_graphs.xg", output_combined_graph_and_mapping+"/all_graphs.vg"])
-    logging.getLogger().debug("vg prune -t "+str(cpu)+" "+output_combined_graph_and_mapping+"/all_graphs.vg | vg index -t "+str(cpu)+" -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -")
-    subprocess.run("vg prune -t "+str(cpu)+" "+output_combined_graph_and_mapping+"/all_graphs.vg | vg index -t "+str(cpu)+" -g "+output_combined_graph_and_mapping+"/all_graphs.gcsa -", shell=True)
-    logging.getLogger().debug("vg snarls -t "+str(cpu)+" "+output_combined_graph_and_mapping+"/all_graphs.vg > "+output_combined_graph_and_mapping+"/all_graphs.snarls")
-    subprocess.run("vg snarls -t "+str(cpu)+" "+output_combined_graph_and_mapping+"/all_graphs.vg > "+output_combined_graph_and_mapping+"/all_graphs.snarls", shell=True)
-    with open(output_combined_graph_and_mapping+"/all_graphs.gfa","w") as out_file:
-        logging.getLogger().debug(["vg", "view", "-t", str(cpu), output_combined_graph_and_mapping+"all_graphs.vg"])
-        subprocess.run(["vg", "view", "--threads", str(cpu), output_combined_graph_and_mapping+"all_graphs.vg"] , stdout=out_file)
+    logging.getLogger().debug(['vg', 'index', "-t", str(cpu), "-x", output_combined_graph_and_mapping.joinpath("all_graphs.xg"), output_combined_graph_and_mapping.joinpath("all_graphs.vg")])
+    subprocess.run(['vg', 'index', "-t", str(cpu), "-x", output_combined_graph_and_mapping.joinpath("all_graphs.xg"), output_combined_graph_and_mapping.joinpath("all_graphs.vg")])
+    logging.getLogger().debug("vg prune -t "+str(cpu)+" "+str(output_combined_graph_and_mapping.joinpath("all_graphs.vg")) +" | vg index -t "+str(cpu)+" -g "+str(output_combined_graph_and_mapping.joinpath("all_graphs.gcsa")) + " - ")
+    subprocess.run("vg prune -t "+str(cpu)+" "+str(output_combined_graph_and_mapping.joinpath("all_graphs.vg")) + " | vg index -t "+str(cpu)+" -g "+str(output_combined_graph_and_mapping.joinpath("all_graphs.gcsa")) + " - ", shell=True)
+    logging.getLogger().debug("vg snarls -t "+str(cpu)+" "+str(output_combined_graph_and_mapping.joinpath("all_graphs.vg")) + " > "+str(output_combined_graph_and_mapping.joinpath("all_graphs.snarls")))
+    subprocess.run("vg snarls -t "+str(cpu)+" "+str(output_combined_graph_and_mapping.joinpath("all_graphs.vg")) + " > " + str(output_combined_graph_and_mapping.joinpath("all_graphs.snarls")), shell=True)
+    with open(output_combined_graph_and_mapping.joinpath("all_graphs.gfa"),"w") as out_file:
+        logging.getLogger().debug(["vg", "view", "-t", str(cpu), output_combined_graph_and_mapping.joinpath("all_graphs.vg")])
+        subprocess.run(["vg", "view", "--threads", str(cpu), output_combined_graph_and_mapping.joinpath("all_graphs.vg")] , stdout=out_file)
 
 def make_local_graph(args):
     fam, nb_genes, temp_dir, fam_genes_fasta_path = args
@@ -408,7 +400,7 @@ def get_all_alignments_one_read(json_file, pangenome: Pangenome, thr=0.95):
     return mapped_paths
 
 
-class PathSampleMapping(Path):
+class PathSampleMapping(VGPath):
     def extends(self):
         self.unique_mapped_abundances  = [0]*len(self.node_ids) # for each node of the path (ordered as `self.nodes`), store the coverage of mapped reads (each node of a mapped path is set to one, except the two extreme than are usually not 100% covered by the mapped sequence)
         self.total_mapped_unique_reads = 0  #  number of reads with unique mapping on this path.
